@@ -473,3 +473,94 @@ async def test_integrity_failures_are_sanitized(
     assert verified.candle_count == 1005
     assert verified.verified_artifact_count == 3  # 1 partition + 2 source pages
     assert verified.content_hash == EXPECTED_CONTENT_HASH
+
+
+@pytest.mark.asyncio
+async def test_source_page_media_type_mismatch_is_integrity_failure(
+    migrated_session: AsyncSession,
+    integration_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result, store = await _import_1005(migrated_session, integration_settings)
+    root = Path(integration_settings.artifact_root_configured)
+    snap = (
+        await migrated_session.execute(
+            select(DatasetSnapshotModel).where(DatasetSnapshotModel.id == result.snapshot_id)
+        )
+    ).scalar_one()
+    source_key = snap.validation_summary["provenance"]["source_pages"][0]["artifact_key"]
+    meta = _meta_path(root, source_key)
+    original = meta.read_text(encoding="utf-8")
+    payload = json.loads(original)
+    payload["media_type"] = "text/csv"
+    meta.write_text(json.dumps(payload), encoding="utf-8")
+
+    app = create_app(settings=integration_settings)
+    async with lifespan_client(app) as api:
+        response = await api.get(
+            f"/api/v1/datasets/{result.snapshot_id}/candles",
+            params={"symbol": "BTCUSDT", "timeframe": "1h"},
+        )
+        assert response.status_code == 409
+        assert "integrity" in response.json()["detail"].lower()
+        assert "items" not in response.json()
+
+    monkeypatch.setenv("ZORQEN_ARTIFACT_ROOT", str(integration_settings.artifact_root_configured))
+    monkeypatch.setenv("ZORQEN_DATABASE_URL", integration_settings.database_url)
+    monkeypatch.setenv("ZORQEN_DATABASE_URL_SYNC", integration_settings.database_url_sync)
+    clear_settings_cache()
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "zorqen_research.datasets",
+            "verify-snapshot",
+            "--snapshot-id",
+            str(result.snapshot_id),
+        ],
+        cwd=REPO_ROOT,
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 3, completed.stderr + completed.stdout
+    assert "integrity_failure" in completed.stderr
+
+    meta.write_text(original, encoding="utf-8")
+    reader = LocalCandlePartitionReader(store)
+    restored = await CandleQueryService(migrated_session, store, reader).verify_snapshot(
+        result.snapshot_id
+    )
+    assert restored.ok is True
+
+
+@pytest.mark.asyncio
+async def test_endpoint_path_mismatch_is_integrity_failure(
+    migrated_session: AsyncSession,
+    integration_settings: Settings,
+) -> None:
+    result, _store = await _import_1005(migrated_session, integration_settings)
+    snap = (
+        await migrated_session.execute(
+            select(DatasetSnapshotModel).where(DatasetSnapshotModel.id == result.snapshot_id)
+        )
+    ).scalar_one()
+    summary = dict(snap.validation_summary)
+    provenance = dict(summary["provenance"])
+    provenance["endpoint_path"] = "/fapi/v1/other"
+    summary["provenance"] = provenance
+    snap.validation_summary = summary
+    await migrated_session.commit()
+
+    app = create_app(settings=integration_settings)
+    async with lifespan_client(app) as api:
+        response = await api.get(
+            f"/api/v1/datasets/{result.snapshot_id}/candles",
+            params={"symbol": "BTCUSDT", "timeframe": "1h"},
+        )
+        assert response.status_code == 409
+        assert "integrity" in response.json()["detail"].lower()

@@ -22,6 +22,7 @@ from zorqen_research.application.market_data.reader import (
 from zorqen_research.application.market_data.serialization import CANONICAL_SCHEMA_VERSION
 from zorqen_research.domain.artifacts import MediaType, sha256_hex, validate_artifact_key
 from zorqen_research.domain.datasets import DatasetPartition, DatasetSnapshot, DatasetSnapshotStatus
+from zorqen_research.domain.markets import Market
 from zorqen_research.domain.symbols import Symbol
 from zorqen_research.domain.timeframes import Timeframe
 from zorqen_research.infrastructure.artifacts.local import (
@@ -33,6 +34,7 @@ SUPPORTED_MANIFEST_VERSION = "2"
 SUPPORTED_PROVIDER = "binance"
 SUPPORTED_MARKET = "binance_futures"
 SUPPORTED_DATA_TYPE = "contract_klines"
+SUPPORTED_ENDPOINT_PATH = "/fapi/v1/klines"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,9 @@ def assert_supported_candle_dataset(snapshot: DatasetSnapshot) -> dict[str, Any]
     if snapshot.status is not DatasetSnapshotStatus.PUBLISHED:
         msg = "Dataset snapshot is not published"
         raise DatasetIntegrityError(msg)
+    if snapshot.exchange is not Market.BINANCE_FUTURES:
+        msg = "Candle querying supports only binance_futures exchange snapshots"
+        raise UnsupportedCandleDatasetError(msg)
     if snapshot.manifest_version != SUPPORTED_MANIFEST_VERSION:
         msg = (
             "Candle querying supports only manifest version 2 canonical Binance "
@@ -88,6 +93,9 @@ def assert_supported_candle_dataset(snapshot: DatasetSnapshot) -> dict[str, Any]
     if provenance.get("canonical_schema_version") != CANONICAL_SCHEMA_VERSION:
         msg = "Candle querying supports only canonical schema version 1"
         raise UnsupportedCandleDatasetError(msg)
+    if provenance.get("endpoint_path") != SUPPORTED_ENDPOINT_PATH:
+        msg = "Provenance endpoint path does not match the supported Binance klines path"
+        raise DatasetIntegrityError(msg)
     return provenance
 
 
@@ -147,11 +155,21 @@ def verify_source_page_artifacts(
         except ArtifactStoreError as exc:
             msg = "Source page artifact verification failed"
             raise DatasetIntegrityError(msg) from exc
+        if stored.key != key:
+            msg = "Source page artifact metadata key mismatch"
+            raise DatasetIntegrityError(msg)
+        if stored.media_type is not MediaType.JSON:
+            msg = "Source page artifact media type must be application/json"
+            raise DatasetIntegrityError(msg)
         if stored.sha256 != expected_sha or stored.byte_size != expected_size:
             msg = "Source page artifact metadata mismatch"
             raise DatasetIntegrityError(msg)
-        if sha256_hex(data) != expected_sha or len(data) != expected_size:
+        digest = sha256_hex(data)
+        if digest != expected_sha or len(data) != expected_size:
             msg = "Source page artifact content mismatch"
+            raise DatasetIntegrityError(msg)
+        if key.rsplit("/", maxsplit=1)[-1] != digest:
+            msg = "Source page artifact key does not match content hash"
             raise DatasetIntegrityError(msg)
         verified += 1
     return verified

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -19,7 +20,7 @@ from zorqen_research.application.market_data.integrity import (
     assert_supported_candle_dataset,
     verify_candle_dataset,
 )
-from zorqen_research.application.market_data.ranges import assert_aligned
+from zorqen_research.application.market_data.ranges import assert_aligned, is_aligned
 from zorqen_research.application.market_data.reader import CandlePartitionReader
 from zorqen_research.domain.candles import Candle
 from zorqen_research.domain.symbols import Symbol, parse_symbol
@@ -31,6 +32,76 @@ MAX_CANDLE_LIMIT = 5000
 MIN_CANDLE_LIMIT = 1
 
 
+def _require_canonical_utc(value: object, *, field: str) -> datetime:
+    if not isinstance(value, datetime):
+        msg = f"{field} must be a datetime"
+        raise CandleQueryValidationError(msg)
+    if value.tzinfo is None:
+        msg = f"{field} must be timezone-aware UTC"
+        raise CandleQueryValidationError(msg)
+    if value.utcoffset() != timedelta(0):
+        msg = f"{field} must have a zero UTC offset"
+        raise CandleQueryValidationError(msg)
+    return value.astimezone(UTC)
+
+
+def validate_candle_query_fields(
+    *,
+    snapshot_id: object,
+    symbol: object,
+    timeframe: object,
+    start: object,
+    end: object,
+    after: object,
+    limit: object,
+) -> None:
+    """Enforce CandleQuery invariants (shared by model and service boundary)."""
+    if not isinstance(snapshot_id, UUID):
+        msg = "snapshot_id must be a UUID"
+        raise CandleQueryValidationError(msg)
+    if not isinstance(symbol, Symbol):
+        msg = "symbol must be a canonical Symbol"
+        raise CandleQueryValidationError(msg)
+    if not isinstance(timeframe, Timeframe):
+        msg = "timeframe must be a canonical Timeframe"
+        raise CandleQueryValidationError(msg)
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        msg = "limit must be an integer"
+        raise CandleQueryValidationError(msg)
+    if limit < MIN_CANDLE_LIMIT or limit > MAX_CANDLE_LIMIT:
+        msg = f"limit must be between {MIN_CANDLE_LIMIT} and {MAX_CANDLE_LIMIT}"
+        raise CandleQueryValidationError(msg)
+
+    start_utc: datetime | None = None
+    end_utc: datetime | None = None
+    after_utc: datetime | None = None
+    if start is not None:
+        start_utc = _require_canonical_utc(start, field="start")
+        if not is_aligned(start_utc, timeframe):
+            msg = f"start must align exactly to timeframe {timeframe.value}"
+            raise CandleQueryValidationError(msg)
+    if end is not None:
+        end_utc = _require_canonical_utc(end, field="end")
+        if not is_aligned(end_utc, timeframe):
+            msg = f"end must align exactly to timeframe {timeframe.value}"
+            raise CandleQueryValidationError(msg)
+    if after is not None:
+        after_utc = _require_canonical_utc(after, field="after")
+        if not is_aligned(after_utc, timeframe):
+            msg = f"after must align exactly to timeframe {timeframe.value}"
+            raise CandleQueryValidationError(msg)
+
+    if start_utc is not None and end_utc is not None and not start_utc < end_utc:
+        msg = "start must be strictly less than end"
+        raise CandleQueryValidationError(msg)
+    if after_utc is not None and start_utc is not None and after_utc < start_utc:
+        msg = "after cursor must not be before start"
+        raise CandleQueryValidationError(msg)
+    if after_utc is not None and end_utc is not None and after_utc >= end_utc:
+        msg = "after cursor must be strictly before end"
+        raise CandleQueryValidationError(msg)
+
+
 @dataclass(frozen=True, slots=True)
 class CandleQuery:
     snapshot_id: UUID
@@ -40,6 +111,17 @@ class CandleQuery:
     end: datetime | None = None
     after: datetime | None = None
     limit: int = DEFAULT_CANDLE_LIMIT
+
+    def __post_init__(self) -> None:
+        validate_candle_query_fields(
+            snapshot_id=self.snapshot_id,
+            symbol=self.symbol,
+            timeframe=self.timeframe,
+            start=self.start,
+            end=self.end,
+            after=self.after,
+            limit=self.limit,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,16 +153,6 @@ class SnapshotVerificationResult:
     message: str | None = None
 
 
-def _require_canonical_utc(value: datetime, *, field: str) -> datetime:
-    if value.tzinfo is None:
-        msg = f"{field} must be timezone-aware UTC"
-        raise CandleQueryValidationError(msg)
-    if value.utcoffset() != timedelta(0):
-        msg = f"{field} must have a zero UTC offset"
-        raise CandleQueryValidationError(msg)
-    return value.astimezone(UTC)
-
-
 def build_candle_query(
     *,
     snapshot_id: UUID,
@@ -96,13 +168,6 @@ def build_candle_query(
         parsed_tf = parse_timeframe(timeframe).value
     except ValueError as exc:
         raise CandleQueryValidationError(str(exc)) from exc
-
-    if not isinstance(limit, int) or isinstance(limit, bool):
-        msg = "limit must be an integer"
-        raise CandleQueryValidationError(msg)
-    if limit < MIN_CANDLE_LIMIT or limit > MAX_CANDLE_LIMIT:
-        msg = f"limit must be between {MIN_CANDLE_LIMIT} and {MAX_CANDLE_LIMIT}"
-        raise CandleQueryValidationError(msg)
 
     start_utc = None
     end_utc = None
@@ -129,16 +194,6 @@ def build_candle_query(
     except ValueError as exc:
         raise CandleQueryValidationError(str(exc)) from exc
 
-    if start_utc is not None and end_utc is not None and not start_utc < end_utc:
-        msg = "start must be strictly less than end"
-        raise CandleQueryValidationError(msg)
-    if after_utc is not None and start_utc is not None and after_utc < start_utc:
-        msg = "after cursor must not be before start"
-        raise CandleQueryValidationError(msg)
-    if after_utc is not None and end_utc is not None and after_utc >= end_utc:
-        msg = "after cursor must be strictly before end"
-        raise CandleQueryValidationError(msg)
-
     return CandleQuery(
         snapshot_id=snapshot_id,
         symbol=parsed_symbol,
@@ -150,8 +205,17 @@ def build_candle_query(
     )
 
 
-def _filter_candles(candles: tuple[Candle, ...], query: CandleQuery) -> list[Candle]:
-    selected: list[Candle] = []
+def collect_matching_page(
+    candles: Iterable[Candle],
+    query: CandleQuery,
+) -> list[Candle]:
+    """
+    Collect at most ``limit + 1`` matching candle references.
+
+    Iteration stops immediately after the lookahead match is found.
+    """
+    collected: list[Candle] = []
+    target = query.limit + 1
     for candle in candles:
         open_time = candle.open_time
         if query.start is not None and open_time < query.start:
@@ -160,14 +224,16 @@ def _filter_candles(candles: tuple[Candle, ...], query: CandleQuery) -> list[Can
             continue
         if query.after is not None and open_time <= query.after:
             continue
-        selected.append(candle)
-    return selected
+        collected.append(candle)
+        if len(collected) >= target:
+            break
+    return collected
 
 
-def paginate_candles(candles: tuple[Candle, ...], query: CandleQuery) -> CandleQueryPage:
-    matching = _filter_candles(candles, query)
-    page = matching[: query.limit]
+def paginate_candles(candles: Iterable[Candle], query: CandleQuery) -> CandleQueryPage:
+    matching = collect_matching_page(candles, query)
     has_more = len(matching) > query.limit
+    page = matching[: query.limit]
     next_cursor = page[-1].open_time if has_more and page else None
     return CandleQueryPage(
         snapshot_id=query.snapshot_id,
@@ -214,6 +280,15 @@ class CandleQueryService:
         )
 
     async def query(self, query: CandleQuery) -> CandleQueryPage:
+        validate_candle_query_fields(
+            snapshot_id=query.snapshot_id,
+            symbol=query.symbol,
+            timeframe=query.timeframe,
+            start=query.start,
+            end=query.end,
+            after=query.after,
+            limit=query.limit,
+        )
         verified = await self._load_verified(
             snapshot_id=query.snapshot_id,
             symbol=query.symbol,

@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.4B): `d3928713f04e8266c7a24c530a255ce12564e58b`
-- Milestone 0.5 base commit: `d3928713f04e8266c7a24c530a255ce12564e58b`
+- Previous verified commit (Milestone 0.5): `b85aae152d78149025becd9c71833150e442b53a`
+- Milestone 0.5A base commit: `b85aae152d78149025becd9c71833150e442b53a`
 - Milestone result commit: current HEAD containing this status update.
 - Exact SHA: report after commit.
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
@@ -28,18 +28,15 @@ Unchanged. Registry metadata only; executable baselines not defined.
 
 ## 4. Current Milestone
 
-- Milestone: `0.5` — Verified Candle Access and Read-Only Querying
+- Milestone: `0.5A` — Close Candle Query and Canonical Verification Gaps
 - Status: Complete pending independent review
-- Base: `d3928713f04e8266c7a24c530a255ce12564e58b`
-- Work completed:
-  - Application `CandlePartitionReader` protocol and `LocalCandlePartitionReader`
-  - Canonical CSV reader with byte-for-byte reserialization enforcement
-  - Manifest/provenance/artifact integrity verification before candle use
-  - Read-only `CandleQueryService` with `[start, end)` filters and open-time cursors
-  - `GET /api/v1/datasets/{snapshot_id}/candles`
-  - `zorqen-dataset verify-snapshot`
-  - Explicit rejection of unsupported legacy fixture schema (no fabrication)
-  - ADR 0005 and README candle-access documentation
+- Base: `b85aae152d78149025becd9c71833150e442b53a`
+- Corrective work completed:
+  - `CandleQuery.__post_init__` + service-boundary revalidation of query invariants
+  - Bounded `limit + 1` cursor pagination without copying the full filtered range
+  - Signed decimal zero canonicalizes to `"0"`
+  - Raw source-page artifacts must verify as `application/json`
+  - Snapshot exchange + provenance endpoint-path identity hardening
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
@@ -59,24 +56,25 @@ Mocked 1005-candle import:
 
 ## 6–8. Product / Architecture / Research Engine
 
-Verified candle access only. No resampling, Parquet, indicators, strategies, backtesting, campaigns, candidates, scoring, MOMO, or trading.
+Corrective only. No resampling, Parquet, indicators, strategies, backtesting, campaigns, candidates, scoring, MOMO, or trading.
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 0.5.
+Awaiting independent review of Milestone 0.5A.
 No later milestone is authorized.
 
-## 10. Verification Evidence (Milestone 0.5)
+## 10. Verification Evidence (Milestone 0.5A)
 
 Commands actually executed:
 
 ```text
+uv sync --frozen --all-extras
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy src
-uv run pytest tests/unit -q                                          # 204 passed
+uv run pytest tests/unit -q                                          # 221 passed
 uv run pytest tests/integration/test_artifact_filesystem.py -q       # 9 passed
-uv run pytest tests/integration -q -m integration                    # 32 passed
+uv run pytest tests/integration -q -m integration                    # 34 passed
 alembic upgrade/downgrade round-trip through 0002 and base           # OK
 uv run zorqen-dataset publish-fixture                                # same fixture hash
 uv run zorqen-dataset publish-fixture                                # idempotent
@@ -89,7 +87,7 @@ curl.exe nginx health/live, ready, strategy-families, datasets
 docker compose down -v
 ```
 
-Live Binance: not required (reads do not contact Binance).
+Live Binance: not required.
 GitHub Actions: unknown until push.
 
 ## 11. Known Defects and Limitations
@@ -100,4 +98,4 @@ GitHub Actions: unknown until push.
 
 ## 12. Next Authorized Work
 
-None until Milestone 0.5 is independently accepted.
+None until Milestone 0.5A is independently accepted.

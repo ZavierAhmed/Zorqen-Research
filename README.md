@@ -182,9 +182,11 @@ Optional query parameters:
 Response highlights:
 
 - Decimal OHLCV / volume fields are JSON **strings** (not floats)
+- Finite decimal values numerically equal to zero serialize as `"0"` (including signed zero)
 - Timestamps are canonical UTC ending in `Z`
 - `trade_count` is an integer
 - `next_cursor` is set when `has_more` is true; the next page uses `after=<next_cursor>`
+- Page matching retains at most `limit + 1` candle references (lookahead), then returns `limit`
 - Absolute artifact paths are never exposed
 
 Integrity failures (corrupted bytes, hash/size/row mismatches, provenance drift) return sanitized HTTP `409`. Unknown or unpublished snapshots and missing partitions return `404`. Invalid query parameters return `422`.

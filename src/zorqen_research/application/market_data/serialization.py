@@ -30,6 +30,8 @@ def _iso_utc(value: datetime) -> str:
 
 
 def format_canonical_decimal(value: Decimal) -> str:
+    if value == 0:
+        return "0"
     text = format(value, "f")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
