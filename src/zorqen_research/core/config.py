@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     worker_idle_interval_seconds: float = Field(default=5.0, gt=0.0)
     artifact_root: Path = Path("artifacts")
 
+    import_max_candles: int = Field(default=100_000, ge=1)
+    binance_request_timeout_seconds: float = Field(default=30.0, gt=0.0)
+    binance_max_attempts: int = Field(default=4, ge=1)
+    binance_max_retry_delay_seconds: float = Field(default=30.0, gt=0.0)
+
     @field_validator("database_url")
     @classmethod
     def validate_async_database_url(cls, value: str) -> str:

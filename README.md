@@ -6,26 +6,26 @@ Zorqen Research is a separate autonomous strategy-research and qualification app
 
 Zorqen Research does **not**:
 
-- Connect to exchanges
-- Store trading credentials
+- Connect to exchange **account** or trading APIs
+- Store trading credentials or API keys
 - Place paper or live orders
 - Approve its own production use
 - Modify MOMO Quant
 - Execute trades
 
-Trading execution belongs to MOMO Quant. This repository is research and qualification only.
+It may fetch **public** market-data snapshots (Milestone 0.4) for research qualification only. Trading execution belongs to MOMO Quant.
 
 ## Current milestone scope
 
-Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** adds:
+Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** adds:
 
-- Local content-addressed immutable artifact store (`ZORQEN_ARTIFACT_ROOT`)
-- Dataset snapshot and partition metadata in PostgreSQL (no candle blobs in the database)
-- Canonical market / symbol / timeframe value objects
-- Deterministic dataset manifests and fixture publication CLI
-- Read-only dataset APIs
+- Public Binance USDⓈ-M Futures kline import (no account, no API keys)
+- Canonical immutable candle model and deterministic CSV serialization
+- Strict UTC `[start, end)` ranges, closed-candle only, complete coverage
+- Raw source-page artifacts, manifest version `2` provenance, idempotent CLI import
+- Explicit Docker Compose profile `binance-import` (never started by `docker compose up`)
 
-**Still not implemented:** Binance or any network market-data download, candle-query API, Parquet import pipeline, backtesting, strategies, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** candle-query API, live streams, resampling, Parquet, indicators, backtesting, strategies, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -41,11 +41,11 @@ Modular monolith with separate processes:
 ```text
 src/zorqen_research/
   api/             FastAPI routes and response schemas
-  application/     Strategy-family, audit, dataset, and artifact workflows
-  domain/          Framework-independent values
-  datasets/        Fixture publication CLI (`zorqen-dataset`)
+  application/     Strategy-family, audit, dataset, market-data, and artifact workflows
+  domain/          Framework-independent values (including candles)
+  datasets/        Fixture + Binance import CLI (`zorqen-dataset`)
   core/            Settings and logging
-  infrastructure/  Database, local artifact store, repositories
+  infrastructure/  Database, local artifact store, Binance public client, repositories
   worker/          Worker entry point and idle service
 frontend/          React + Vite + TypeScript UI
 alembic/           Migrations (baseline, registry/audit, dataset manifests)
@@ -88,13 +88,61 @@ uv run zorqen-dataset publish-fixture
 uv run python -m zorqen_research.datasets publish-fixture
 ```
 
-Idempotency: repeating the command with the same fixture content returns the existing published snapshot (`created=false`). A conflicting snapshot with the same name fails clearly.
+Idempotency: repeating the command with the same fixture content returns the existing published snapshot (`created=false`). A conflicting snapshot with the same name fails clearly. The fixture retains manifest version `1` and hash `5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`.
 
 Docker (after the stack is up):
 
 ```powershell
 docker compose --profile fixture run --rm --no-deps dataset-fixture
 ```
+
+### Binance public candle import (Milestone 0.4)
+
+Imports historical **closed** USDⓈ-M Futures klines from the public REST host `https://fapi.binance.com` (`GET /fapi/v1/klines`). No Binance account, API key, API secret, signed request, or private endpoint is supported.
+
+Supported symbols: `BTCUSDT`, `ETHUSDT`, `BNBUSDT`.
+
+Supported timeframes: `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w` (aliases rejected).
+
+Range semantics:
+
+- Half-open interval `[start, end)` — `end` itself is not imported
+- `start` and `end` must be timezone-aware UTC and exactly aligned to the timeframe
+- `1d` aligns to `00:00:00 UTC`; `1w` aligns to Monday `00:00:00 UTC`
+- Only fully closed candles are accepted (open-candle ranges are rejected, not clamped)
+- Complete coverage is required; gaps/duplicates/out-of-order candles reject publication
+- Guardrail: `ZORQEN_IMPORT_MAX_CANDLES` (default `100000`) rejects oversized expected counts before download
+
+```powershell
+uv run zorqen-dataset import-binance-klines `
+  --symbol BTCUSDT `
+  --timeframe 1h `
+  --start 2026-06-01T00:00:00Z `
+  --end 2026-06-02T00:00:00Z
+```
+
+JSON result on stdout includes `ok`, `created`, `snapshot_id`, `content_hash`, range fields, `candle_count`, `source_page_count`, and `normalized_sha256`.
+
+Idempotency: the same import identity and logical content returns the existing snapshot (`created=false`). Same identity with different historical content raises a source-drift / duplicate conflict and does not replace the snapshot.
+
+Artifacts:
+
+- Raw successful Binance pages stored as immutable JSON objects (content-addressed keys only)
+- Normalized partition is deterministic canonical CSV (`text/csv`, UTF-8, `\n` endings)
+- Manifest version `2` includes provider/market/endpoint/symbol/timeframe/range provenance
+
+Docker (stack must be up; this service never starts during ordinary `docker compose up`):
+
+```powershell
+docker compose --profile binance-import run --rm binance-import `
+  import-binance-klines `
+  --symbol BTCUSDT `
+  --timeframe 1h `
+  --start 2026-06-01T00:00:00Z `
+  --end 2026-06-01T05:00:00Z
+```
+
+CI uses mocked HTTP transport only. An optional live public-data smoke check may be run manually when internet access is available; it is not part of GitHub Actions.
 
 ### Dataset read APIs
 

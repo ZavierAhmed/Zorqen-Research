@@ -37,7 +37,7 @@ def build_manifest_document(snapshot: DatasetSnapshot) -> dict[str, Any]:
         snapshot.partitions,
         key=lambda item: (item.symbol.value, item.timeframe.value),
     )
-    return {
+    document: dict[str, Any] = {
         "content_hash": snapshot.content_hash,
         "dataset_name": snapshot.name,
         "dataset_snapshot_id": str(snapshot.id),
@@ -62,6 +62,12 @@ def build_manifest_document(snapshot: DatasetSnapshot) -> dict[str, Any]:
         "total_rows": snapshot.total_rows,
         "validation_summary": snapshot.validation_summary,
     }
+    # Manifest v2 promotes stable import provenance to a top-level field.
+    if str(document["manifest_version"]) == "2":
+        provenance = (snapshot.validation_summary or {}).get("provenance")
+        if isinstance(provenance, dict):
+            document["provenance"] = provenance
+    return document
 
 
 def manifest_hash_payload(document: dict[str, Any]) -> dict[str, Any]:

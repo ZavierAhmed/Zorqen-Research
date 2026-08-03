@@ -106,6 +106,36 @@ services:
     profiles: ["fixture"]
     command: ["uv", "run", "zorqen-dataset", "publish-fixture"]
 
+  # Explicit Binance public-data import only. Never started by `docker compose up`.
+  # Example:
+  #   docker compose --profile binance-import run --rm binance-import \
+  #     import-binance-klines --symbol BTCUSDT --timeframe 1h \
+  #     --start 2026-06-01T00:00:00Z --end 2026-06-01T05:00:00Z
+  binance-import:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: zorqen-research-binance-import
+    environment:
+      ZORQEN_ENVIRONMENT: development
+      ZORQEN_LOG_LEVEL: INFO
+      ZORQEN_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_DATABASE_URL_SYNC: postgresql+psycopg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_ARTIFACT_ROOT: /app/artifacts
+      ZORQEN_IMPORT_MAX_CANDLES: ${ZORQEN_IMPORT_MAX_CANDLES:-100000}
+    volumes:
+      - zorqen_artifacts:/app/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    profiles: ["binance-import"]
+    entrypoint: ["uv", "run", "zorqen-dataset"]
+    command: ["--help"]
+
   frontend:
     build:
       context: ./frontend

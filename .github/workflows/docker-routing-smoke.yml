@@ -20,10 +20,10 @@ jobs:
       - name: Validate Compose file
         run: docker compose config --quiet
 
-      - name: Build API, worker, migrate, frontend, and dataset-fixture images
+      - name: Build API, worker, migrate, frontend, dataset-fixture, and binance-import images
         run: |
-          docker compose --profile fixture build \
-            api worker migrate frontend dataset-fixture
+          docker compose --profile fixture --profile binance-import build \
+            api worker migrate frontend dataset-fixture binance-import
 
       - name: Start postgres, migrate, api, worker, and frontend
         run: docker compose up -d postgres migrate api worker frontend
