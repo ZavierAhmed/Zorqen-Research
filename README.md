@@ -17,15 +17,15 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** adds:
+Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** / **0.4A** / **0.4B** added public Binance futures candle import with strict candle and artifact-root invariants. Milestone **0.5** adds:
 
-- Public Binance USDⓈ-M Futures kline import (no account, no API keys)
-- Canonical immutable candle model and deterministic CSV serialization
-- Strict UTC `[start, end)` ranges, closed-candle only, complete coverage
-- Raw source-page artifacts, manifest version `2` provenance, idempotent CLI import
-- Explicit Docker Compose profile `binance-import` (never started by `docker compose up`)
+- Verified read path for canonical CSV candle partitions
+- Artifact, manifest, and provenance integrity checks before every query
+- Read-only candle query API with `[start, end)` filters and open-time cursor pagination
+- Dataset verification CLI (`zorqen-dataset verify-snapshot`)
+- Explicit support for manifest-v2 Binance imports only; legacy fixture remains query-unsupported
 
-**Still not implemented:** candle-query API, live streams, resampling, Parquet, indicators, backtesting, strategies, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** resampling, Parquet, indicators, backtesting, strategies, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -150,9 +150,56 @@ CI uses mocked HTTP transport only. An optional live public-data smoke check may
 GET /api/v1/datasets
 GET /api/v1/datasets/{snapshot_id}
 GET /api/v1/datasets/{snapshot_id}/manifest
+GET /api/v1/datasets/{snapshot_id}/candles
 ```
 
-Responses never include absolute filesystem paths. Draft/rejected snapshots are not listed. There is no create/upload/update/delete dataset HTTP API, no candle-query API, and no Binance download API.
+#### Verified candle access (Milestone 0.5)
+
+Candle querying revalidates published metadata, the canonical manifest hash, partition provenance, raw source-page artifacts, and the normalized CSV partition before returning any rows. Reads never contact Binance or other networks, never mutate datasets, and do not create audit events.
+
+Supported datasets only:
+
+- `manifest_version`: `2`
+- `provider`: `binance`
+- `market`: `binance_futures`
+- `data_type`: `contract_klines`
+- `canonical_schema_version`: `1`
+- partition media type: `text/csv`
+
+The packaged local fixture remains manifest version `1` with six OHLCV columns and frozen hash `5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`. Dataset list/detail/manifest APIs still serve it. Candle query returns HTTP `409` with an unsupported-schema error; missing fields are never fabricated. A future governed migration may publish a new canonical derivative without altering the original artifact.
+
+```http
+GET /api/v1/datasets/{snapshot_id}/candles?symbol=BTCUSDT&timeframe=1h
+```
+
+Optional query parameters:
+
+- `start` — inclusive open-time lower bound (canonical UTC `Z`, timeframe-aligned)
+- `end` — exclusive open-time upper bound (`[start, end)`)
+- `after` — exclusive open-time cursor from a prior `next_cursor`
+- `limit` — default `1000`, minimum `1`, maximum `5000`
+
+Response highlights:
+
+- Decimal OHLCV / volume fields are JSON **strings** (not floats)
+- Timestamps are canonical UTC ending in `Z`
+- `trade_count` is an integer
+- `next_cursor` is set when `has_more` is true; the next page uses `after=<next_cursor>`
+- Absolute artifact paths are never exposed
+
+Integrity failures (corrupted bytes, hash/size/row mismatches, provenance drift) return sanitized HTTP `409`. Unknown or unpublished snapshots and missing partitions return `404`. Invalid query parameters return `422`.
+
+Performance note: this milestone reads and verifies the full canonical partition artifact before serving a page. Parquet / indexed access and process-global caching are deferred. Memory remains bounded by `ZORQEN_IMPORT_MAX_CANDLES`.
+
+#### Verification CLI
+
+```powershell
+uv run zorqen-dataset verify-snapshot --snapshot-id <uuid>
+```
+
+Successful verification prints JSON with `ok`, hashes, partition/candle/source counts, and open-time bounds (exit `0`). Unsupported legacy schemas exit nonzero with `unsupported: true` without calling the result corrupted solely for format. Unknown or integrity failures also exit nonzero. Verification performs no mutation and no network access.
+
+Responses never include absolute filesystem paths. Draft/rejected snapshots are not listed. There is no create/upload/update/delete dataset HTTP API, no candle mutation API, no resampling parameter, and no Binance refresh API.
 ## Frontend API routing (same-origin default)
 
 Ordinary local and Docker use must keep the browser on relative `/api/...` URLs. Do not set an absolute API URL for day-to-day development.

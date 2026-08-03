@@ -29,11 +29,15 @@ def _iso_utc(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _decimal_text(value: Decimal) -> str:
+def format_canonical_decimal(value: Decimal) -> str:
     text = format(value, "f")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
     return text or "0"
+
+
+def _decimal_text(value: Decimal) -> str:
+    return format_canonical_decimal(value)
 
 
 def serialize_candles_csv(candles: Sequence[Candle]) -> bytes:

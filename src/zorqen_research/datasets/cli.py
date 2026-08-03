@@ -9,14 +9,25 @@ import sys
 from datetime import datetime
 from importlib.resources import as_file, files
 from pathlib import Path
+from uuid import UUID
 
 from zorqen_research.application.datasets.service import (
     DatasetDuplicateError,
+    DatasetNotFoundError,
     DatasetService,
 )
+from zorqen_research.application.market_data.errors import (
+    CandlePartitionIntegrityError,
+    DatasetIntegrityError,
+    UnsupportedCandleDatasetError,
+)
 from zorqen_research.application.market_data.import_service import BinanceImportService
+from zorqen_research.application.market_data.query import CandleQueryService
 from zorqen_research.core.config import get_settings
 from zorqen_research.core.logging import configure_logging
+from zorqen_research.infrastructure.artifacts.candle_partition_reader import (
+    LocalCandlePartitionReader,
+)
 from zorqen_research.infrastructure.artifacts.local import LocalFilesystemArtifactStore
 from zorqen_research.infrastructure.binance.client import BinanceFuturesPublicClient
 from zorqen_research.infrastructure.binance.errors import BinanceClientError
@@ -140,10 +151,104 @@ async def _import_binance(
         await dispose_engine(engine)
 
 
+async def _verify_snapshot(snapshot_id: UUID) -> int:
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    engine = create_engine(settings.database_url)
+    session_factory = get_session_factory(engine)
+    store = LocalFilesystemArtifactStore(settings.artifact_root_configured)
+    reader = LocalCandlePartitionReader(store)
+    try:
+        async with session_factory() as session:
+            service = CandleQueryService(session, store, reader)
+            try:
+                result = await service.verify_snapshot(snapshot_id)
+            except DatasetNotFoundError as exc:
+                print(str(exc), file=sys.stderr)
+                print(json.dumps({"ok": False, "error": "snapshot_not_found"}), file=sys.stderr)
+                return 1
+            except UnsupportedCandleDatasetError as exc:
+                print(str(exc), file=sys.stderr)
+                print(
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "unsupported": True,
+                            "snapshot_id": str(snapshot_id),
+                            "error": str(exc),
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
+            except (DatasetIntegrityError, CandlePartitionIntegrityError) as exc:
+                print(str(exc), file=sys.stderr)
+                print(
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "unsupported": False,
+                            "snapshot_id": str(snapshot_id),
+                            "error": "integrity_failure",
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ),
+                    file=sys.stderr,
+                )
+                return 3
+            except Exception as exc:  # noqa: BLE001 — CLI boundary
+                print(str(exc), file=sys.stderr)
+                print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
+                return 1
+
+            if result.unsupported:
+                print(result.message or "unsupported candle schema", file=sys.stderr)
+                payload = {
+                    "ok": False,
+                    "unsupported": True,
+                    "snapshot_id": str(result.snapshot_id),
+                    "content_hash": result.content_hash,
+                    "manifest_version": result.manifest_version,
+                    "partition_count": result.partition_count,
+                    "message": result.message,
+                }
+                print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+                return 2
+
+            payload = {
+                "ok": True,
+                "snapshot_id": str(result.snapshot_id),
+                "content_hash": result.content_hash,
+                "manifest_version": result.manifest_version,
+                "partition_count": result.partition_count,
+                "verified_partition_count": result.verified_partition_count,
+                "candle_count": result.candle_count,
+                "source_page_count": result.source_page_count,
+                "verified_artifact_count": result.verified_artifact_count,
+                "minimum_open_time": (
+                    None
+                    if result.minimum_open_time is None
+                    else result.minimum_open_time.isoformat().replace("+00:00", "Z")
+                ),
+                "maximum_open_time": (
+                    None
+                    if result.maximum_open_time is None
+                    else result.maximum_open_time.isoformat().replace("+00:00", "Z")
+                ),
+            }
+            print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+            return 0
+    finally:
+        await dispose_engine(engine)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="zorqen-dataset",
-        description="Dataset fixture publication and Binance public kline import",
+        description="Dataset fixture publication, Binance import, and verification",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     publish = sub.add_parser(
@@ -176,6 +281,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Exclusive UTC end aligned to the timeframe",
     )
 
+    verify = sub.add_parser(
+        "verify-snapshot",
+        help="Verify a published candle dataset snapshot without mutation",
+    )
+    verify.add_argument("--snapshot-id", required=True, type=UUID)
+
     args = parser.parse_args(argv)
     if args.command == "publish-fixture":
         fixture_path = args.fixture_path
@@ -192,5 +303,7 @@ def main(argv: list[str] | None = None) -> int:
                 end=args.end,
             )
         )
+    if args.command == "verify-snapshot":
+        return asyncio.run(_verify_snapshot(args.snapshot_id))
     parser.error(f"Unknown command: {args.command}")
     return 2
