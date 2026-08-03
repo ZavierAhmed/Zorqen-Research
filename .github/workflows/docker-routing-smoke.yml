@@ -1,4 +1,4 @@
-# Docker Compose routing smoke: frontend/nginx same-origin /api -> API + registry.
+# Docker Compose routing smoke: frontend/nginx same-origin /api -> API + registry + datasets.
 name: Docker Routing Smoke
 
 on:
@@ -20,11 +20,11 @@ jobs:
       - name: Validate Compose file
         run: docker compose config --quiet
 
-      - name: Build API, migrate, and frontend images
-        run: docker compose build api migrate frontend
+      - name: Build API, worker, migrate, and frontend images
+        run: docker compose build api worker migrate frontend
 
-      - name: Start postgres, migrate, api, and frontend
-        run: docker compose up -d postgres migrate api frontend
+      - name: Start postgres, migrate, api, worker, and frontend
+        run: docker compose up -d postgres migrate api worker frontend
 
       - name: Wait for frontend origin readiness through nginx
         run: |
@@ -77,9 +77,63 @@ jobs:
           print("nginx -> strategy-families registry ok")
           PY
 
+      - name: Publish deterministic dataset fixture
+        run: |
+          set -euo pipefail
+          docker compose --profile fixture run --rm --no-deps dataset-fixture | tee /tmp/fixture.json
+          python3 - <<'PY'
+          import json
+          payload = json.load(open("/tmp/fixture.json"))
+          assert payload["ok"] is True, payload
+          assert payload["created"] is True, payload
+          assert payload["partition_count"] == 1, payload
+          assert payload["total_rows"] == 5, payload
+          print("fixture publication ok", payload["snapshot_id"], payload["manifest_hash"])
+          PY
+
+      - name: Verify datasets API via frontend origin
+        run: |
+          set -euo pipefail
+          curl -sf http://127.0.0.1:5173/api/v1/datasets | tee /tmp/datasets.json
+          python3 - <<'PY'
+          import json
+          import re
+          payload = json.load(open("/tmp/datasets.json"))
+          assert payload["count"] == 1, payload
+          assert len(payload["items"]) == 1, payload
+          item = payload["items"][0]
+          assert item["name"] == "fixture_binance_futures_btcusdt_1h", item
+          assert item["status"] == "published", item
+          assert item["exchange"] == "binance_futures", item
+          text = json.dumps(payload)
+          assert re.search(r"[A-Za-z]:\\\\|/[Hh]ome/|/[Uu]sers/|/app/artifacts", text) is None, text
+          open("/tmp/snapshot_id.txt", "w").write(item["id"])
+          open("/tmp/content_hash.txt", "w").write(item["content_hash"])
+          print("nginx -> datasets list ok")
+          PY
+          SNAPSHOT_ID="$(cat /tmp/snapshot_id.txt)"
+          CONTENT_HASH="$(cat /tmp/content_hash.txt)"
+          curl -sf "http://127.0.0.1:5173/api/v1/datasets/${SNAPSHOT_ID}" | tee /tmp/dataset_detail.json
+          curl -sf "http://127.0.0.1:5173/api/v1/datasets/${SNAPSHOT_ID}/manifest" | tee /tmp/dataset_manifest.json
+          python3 - <<'PY'
+          import json
+          import re
+          detail = json.load(open("/tmp/dataset_detail.json"))
+          manifest = json.load(open("/tmp/dataset_manifest.json"))
+          content_hash = open("/tmp/content_hash.txt").read().strip()
+          assert detail["content_hash"] == content_hash, (detail, content_hash)
+          assert manifest["content_hash"] == content_hash, (manifest, content_hash)
+          assert len(detail["partitions"]) == 1, detail
+          assert detail["partitions"][0]["symbol"] == "BTCUSDT", detail
+          assert detail["partitions"][0]["timeframe"] == "1h", detail
+          text = json.dumps({"detail": detail, "manifest": manifest})
+          assert re.search(r"[A-Za-z]:\\\\|/[Hh]ome/|/[Uu]sers/|/app/artifacts", text) is None, text
+          print("nginx -> dataset detail/manifest ok")
+          PY
+
       - name: Print service logs on failure
         if: failure()
-        run: docker compose logs --no-color postgres migrate api frontend
+        run: docker compose logs --no-color postgres migrate api worker frontend
 
       - name: Clean up
         if: always()

@@ -17,15 +17,15 @@ Trading execution belongs to MOMO Quant. This repository is research and qualifi
 
 ## Current milestone scope
 
-Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** adds:
+Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** adds:
 
-- Strategy-family metadata registry (two approved families, no executable definitions)
-- Append-only application audit-event foundation
-- Read-only strategy-family APIs
-- Alembic migration `0002_core_registry_and_audit` with stable seed UUIDs
-- Dedicated Docker Compose `migrate` service
+- Local content-addressed immutable artifact store (`ZORQEN_ARTIFACT_ROOT`)
+- Dataset snapshot and partition metadata in PostgreSQL (no candle blobs in the database)
+- Canonical market / symbol / timeframe value objects
+- Deterministic dataset manifests and fixture publication CLI
+- Read-only dataset APIs
 
-**Still not implemented:** strategy logic/DSL, indicators, parameters, market-data import, backtesting, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** Binance or any network market-data download, candle-query API, Parquet import pipeline, backtesting, strategies, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -41,18 +41,62 @@ Modular monolith with separate processes:
 ```text
 src/zorqen_research/
   api/             FastAPI routes and response schemas
-  application/     Strategy-family and audit services
+  application/     Strategy-family, audit, dataset, and artifact workflows
   domain/          Framework-independent values
+  datasets/        Fixture publication CLI (`zorqen-dataset`)
   core/            Settings and logging
-  infrastructure/  Database engine, models, repositories
+  infrastructure/  Database, local artifact store, repositories
   worker/          Worker entry point and idle service
 frontend/          React + Vite + TypeScript UI
-alembic/           Migrations (baseline + core registry/audit)
-tests/unit|integration
+alembic/           Migrations (baseline, registry/audit, dataset manifests)
+tests/unit|integration|fixtures
 docs/specification Master specification PDF
 docs/adr           Architecture decision records
 ```
 
+## Artifact storage and dataset manifests
+
+PostgreSQL stores dataset **snapshot** and **partition** metadata only. Large files live in the local artifact store under `ZORQEN_ARTIFACT_ROOT` as SHA-256 content-addressed objects (`sha256/ab/cd/<digest>`). Publication is atomic (temp file → flush → replace). Published artifacts are immutable (no overwrite/delete API).
+
+Terminology:
+
+| Term | Meaning |
+|---|---|
+| Snapshot | Named dataset version with status `draft` / `published` / `rejected` |
+| Partition | One symbol+timeframe artifact belonging to a snapshot |
+| Manifest | Canonical JSON describing a published snapshot and its partitions |
+
+Supported research market (no exchange connectivity): `binance_futures`.
+
+Approved symbols: `BTCUSDT`, `ETHUSDT`, `BNBUSDT`.
+
+Approved timeframes: `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w` (aliases like `60m` / `H1` rejected).
+
+### Fixture publication (explicit; not automatic on startup)
+
+```powershell
+uv run zorqen-dataset publish-fixture
+# or:
+uv run python -m zorqen_research.datasets publish-fixture
+```
+
+Idempotency: repeating the command with the same fixture content returns the existing published snapshot (`created=false`). A conflicting snapshot with the same name fails clearly.
+
+Docker (after the stack is up):
+
+```powershell
+docker compose --profile fixture run --rm --no-deps dataset-fixture
+```
+
+### Dataset read APIs
+
+```http
+GET /api/v1/datasets
+GET /api/v1/datasets/{snapshot_id}
+GET /api/v1/datasets/{snapshot_id}/manifest
+```
+
+Responses never include absolute filesystem paths. Draft/rejected snapshots are not listed. There is no create/upload/update/delete dataset HTTP API, no candle-query API, and no Binance download API.
 ## Frontend API routing (same-origin default)
 
 Ordinary local and Docker use must keep the browser on relative `/api/...` URLs. Do not set an absolute API URL for day-to-day development.
@@ -197,7 +241,7 @@ Direct (local PostgreSQL):
 
 ```powershell
 uv run alembic upgrade head
-uv run alembic downgrade 0001_baseline
+uv run alembic downgrade 0002_core_registry_and_audit
 uv run alembic upgrade head
 uv run alembic downgrade base
 uv run alembic upgrade head
@@ -211,7 +255,7 @@ docker compose up -d postgres migrate
 docker compose up -d postgres migrate api worker frontend
 ```
 
-The `migrate` service uses the backend image target `migrate`, runs `alembic upgrade head`, and exits. API and worker wait for `service_completed_successfully`.
+The `migrate` service uses the backend image target `migrate`, runs `alembic upgrade head`, and exits. API and worker wait for `service_completed_successfully`. Migration `0003_dataset_manifest_foundation` creates `dataset_snapshots` and `dataset_partitions` (no fixture seed data).
 
 ## Test commands
 
@@ -239,7 +283,7 @@ npm run build
 
 ```powershell
 uv run alembic upgrade head
-uv run alembic downgrade 0001_baseline
+uv run alembic downgrade 0002_core_registry_and_audit
 uv run alembic upgrade head
 uv run alembic downgrade base
 uv run alembic upgrade head
@@ -249,13 +293,17 @@ uv run alembic upgrade head
 
 ```powershell
 docker compose config --quiet
-docker compose build api worker frontend
+docker compose build api worker migrate frontend
 docker compose up -d postgres migrate api worker frontend
+
+# Explicit fixture publish (not part of normal startup):
+docker compose --profile fixture run --rm --no-deps dataset-fixture
 
 # Verify through the frontend/nginx origin (not only port 8000):
 curl.exe -f http://127.0.0.1:5173/api/v1/health/live
 curl.exe -f http://127.0.0.1:5173/api/v1/health/ready
 curl.exe -f http://127.0.0.1:5173/api/v1/strategy-families
+curl.exe -f http://127.0.0.1:5173/api/v1/datasets
 
 docker compose logs --no-color postgres migrate api worker frontend
 docker compose down -v
@@ -270,11 +318,14 @@ Unit tests do not require Docker. Integration tests and Alembic verification req
 - Verified project status: [PROJECT_STATUS.md](PROJECT_STATUS.md)
 - Foundation ADR: [docs/adr/0001-foundation-stack.md](docs/adr/0001-foundation-stack.md)
 - Registry/audit ADR: [docs/adr/0002-core-registry-and-audit.md](docs/adr/0002-core-registry-and-audit.md)
+- Artifacts/datasets ADR: [docs/adr/0003-artifacts-and-dataset-manifests.md](docs/adr/0003-artifacts-and-dataset-manifests.md)
 
 ## Current non-goals
 
 The following are explicitly out of scope and must not be started until authorized:
 
+- Binance / network market-data downloading
+- Candle-query API or candle tables in PostgreSQL
 - Strategy logic (Adaptive MTF Trend Breakout, Support and Resistance)
 - Backtesting and validation engines
 - Candidate scoring and qualification policies

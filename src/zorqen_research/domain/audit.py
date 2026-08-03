@@ -1,11 +1,51 @@
-"""Audit-event domain values (append-only application events)."""
+"""Harden audit payload validation for fully JSON-serializable objects."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
+
+_JSON_PRIMITIVES = (str, int, float, bool, type(None))
+
+
+def assert_json_serializable(value: object, *, path: str = "payload") -> None:
+    """
+    Recursively reject values that are not JSON primitives/objects/arrays.
+
+    Intentionally rejects datetime, UUID, bytes, and other non-JSON types.
+    """
+    if isinstance(value, _JSON_PRIMITIVES):
+        if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+            msg = f"{path} contains a non-finite float"
+            raise ValueError(msg)
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            assert_json_serializable(item, path=f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                msg = f"{path} keys must be strings"
+                raise TypeError(msg)
+            assert_json_serializable(item, path=f"{path}.{key}")
+        return
+    msg = f"{path} contains a non-JSON-serializable value of type {type(value).__name__}"
+    raise TypeError(msg)
+
+
+def ensure_json_round_trip(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate and return a deep JSON round-tripped copy of the payload."""
+    assert_json_serializable(payload)
+    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True, ensure_ascii=False)
+    loaded = json.loads(encoded)
+    if not isinstance(loaded, dict):
+        msg = "audit payload must be a JSON object (dict)"
+        raise TypeError(msg)
+    return loaded
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +74,7 @@ class AuditEventAppendCommand:
         if not isinstance(self.payload, dict):
             msg = "audit payload must be a JSON object (dict)"
             raise TypeError(msg)
+        object.__setattr__(self, "payload", ensure_json_round_trip(self.payload))
 
 
 @dataclass(frozen=True, slots=True)

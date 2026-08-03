@@ -27,6 +27,7 @@ dev = [
 [project.scripts]
 zorqen-api = "zorqen_research.api.app:run"
 zorqen-worker = "zorqen_research.worker.__main__:main"
+zorqen-dataset = "zorqen_research.datasets.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -34,6 +35,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/zorqen_research"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/zorqen_research/datasets/fixtures/btcusdt_1h_fixture.csv" = "zorqen_research/datasets/fixtures/btcusdt_1h_fixture.csv"
 
 [tool.uv]
 package = true

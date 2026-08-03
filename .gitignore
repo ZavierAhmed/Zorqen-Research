@@ -41,8 +41,9 @@ frontend/dist/
 frontend/coverage/
 frontend/.vite/
 
-# Runtime artifacts
-artifacts/
+# Runtime artifact store (root directory only; not Python packages named artifacts)
+/artifacts/
+/artifacts-test/
 logs/
 *.log
 tmp/

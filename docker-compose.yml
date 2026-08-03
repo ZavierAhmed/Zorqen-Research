@@ -80,6 +80,32 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Explicit fixture publication only. Not started by `docker compose up`.
+  # Example:
+  #   docker compose --profile fixture run --rm dataset-fixture
+  dataset-fixture:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: zorqen-research-dataset-fixture
+    environment:
+      ZORQEN_ENVIRONMENT: development
+      ZORQEN_LOG_LEVEL: INFO
+      ZORQEN_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_DATABASE_URL_SYNC: postgresql+psycopg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_ARTIFACT_ROOT: /app/artifacts
+    volumes:
+      - zorqen_artifacts:/app/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    profiles: ["fixture"]
+    command: ["uv", "run", "zorqen-dataset", "publish-fixture"]
+
   frontend:
     build:
       context: ./frontend
