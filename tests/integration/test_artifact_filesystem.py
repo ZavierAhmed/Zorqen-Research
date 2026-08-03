@@ -104,3 +104,15 @@ def test_top_level_store_symlink_rejected(tmp_path: Path, label: str) -> None:
         pytest.skip("Symlink creation is not available on this platform")
     with pytest.raises(ArtifactStoreError, match="symlink|escapes"):
         LocalFilesystemArtifactStore(root)
+
+
+def test_configured_root_symlink_rejected_filesystem(tmp_path: Path) -> None:
+    outside = tmp_path / "outside-root"
+    outside.mkdir()
+    linked_root = tmp_path / "linked-artifacts"
+    try:
+        linked_root.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("Symlink creation is not available on this platform")
+    with pytest.raises(ArtifactStoreError, match="Configured artifact root must not be a symlink"):
+        LocalFilesystemArtifactStore(linked_root)

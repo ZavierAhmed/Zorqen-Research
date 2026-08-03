@@ -20,8 +20,10 @@ jobs:
       - name: Validate Compose file
         run: docker compose config --quiet
 
-      - name: Build API, worker, migrate, and frontend images
-        run: docker compose build api worker migrate frontend
+      - name: Build API, worker, migrate, frontend, and dataset-fixture images
+        run: |
+          docker compose --profile fixture build \
+            api worker migrate frontend dataset-fixture
 
       - name: Start postgres, migrate, api, worker, and frontend
         run: docker compose up -d postgres migrate api worker frontend
@@ -80,15 +82,45 @@ jobs:
       - name: Publish deterministic dataset fixture
         run: |
           set -euo pipefail
-          docker compose --profile fixture run --rm --no-deps dataset-fixture | tee /tmp/fixture.json
+          docker compose --profile fixture run \
+            --rm \
+            --no-deps \
+            -T \
+            dataset-fixture | tee /tmp/fixture-output.log
           python3 - <<'PY'
           import json
-          payload = json.load(open("/tmp/fixture.json"))
-          assert payload["ok"] is True, payload
+          from pathlib import Path
+
+          EXPECTED_HASH = "5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80"
+          lines = [
+              line.strip()
+              for line in Path("/tmp/fixture-output.log").read_text().splitlines()
+              if line.strip()
+          ]
+          payload = None
+          for line in reversed(lines):
+              try:
+                  candidate = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if isinstance(candidate, dict) and candidate.get("ok") is True:
+                  payload = candidate
+                  break
+          assert payload is not None, {
+              "error": "No valid fixture result JSON was found",
+              "output": lines,
+          }
           assert payload["created"] is True, payload
           assert payload["partition_count"] == 1, payload
           assert payload["total_rows"] == 5, payload
-          print("fixture publication ok", payload["snapshot_id"], payload["manifest_hash"])
+          assert payload["manifest_hash"] == EXPECTED_HASH, payload
+          Path("/tmp/snapshot_id.txt").write_text(payload["snapshot_id"])
+          Path("/tmp/fixture_hash.txt").write_text(payload["manifest_hash"])
+          print(
+              "fixture publication ok",
+              payload["snapshot_id"],
+              payload["manifest_hash"],
+          )
           PY
 
       - name: Verify datasets API via frontend origin
@@ -98,6 +130,9 @@ jobs:
           python3 - <<'PY'
           import json
           import re
+          from pathlib import Path
+
+          EXPECTED_HASH = "5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80"
           payload = json.load(open("/tmp/datasets.json"))
           assert payload["count"] == 1, payload
           assert len(payload["items"]) == 1, payload
@@ -105,6 +140,9 @@ jobs:
           assert item["name"] == "fixture_binance_futures_btcusdt_1h", item
           assert item["status"] == "published", item
           assert item["exchange"] == "binance_futures", item
+          fixture_hash = Path("/tmp/fixture_hash.txt").read_text().strip()
+          assert fixture_hash == EXPECTED_HASH, fixture_hash
+          assert item["content_hash"] == fixture_hash, (item["content_hash"], fixture_hash)
           text = json.dumps(payload)
           assert re.search(r"[A-Za-z]:\\\\|/[Hh]ome/|/[Uu]sers/|/app/artifacts", text) is None, text
           open("/tmp/snapshot_id.txt", "w").write(item["id"])
@@ -118,10 +156,17 @@ jobs:
           python3 - <<'PY'
           import json
           import re
+          from pathlib import Path
+
           detail = json.load(open("/tmp/dataset_detail.json"))
           manifest = json.load(open("/tmp/dataset_manifest.json"))
           content_hash = open("/tmp/content_hash.txt").read().strip()
-          assert detail["content_hash"] == content_hash, (detail, content_hash)
+          fixture_hash = Path("/tmp/fixture_hash.txt").read_text().strip()
+          assert detail["content_hash"] == content_hash == fixture_hash, (
+              detail["content_hash"],
+              content_hash,
+              fixture_hash,
+          )
           assert manifest["content_hash"] == content_hash, (manifest, content_hash)
           assert len(detail["partitions"]) == 1, detail
           assert detail["partitions"][0]["symbol"] == "BTCUSDT", detail
@@ -133,7 +178,16 @@ jobs:
 
       - name: Print service logs on failure
         if: failure()
-        run: docker compose logs --no-color postgres migrate api worker frontend
+        run: |
+          set -euo pipefail
+          echo "===== fixture-output.log ====="
+          if [ -f /tmp/fixture-output.log ]; then
+            cat /tmp/fixture-output.log
+          else
+            echo "(missing /tmp/fixture-output.log)"
+          fi
+          echo "===== compose service logs ====="
+          docker compose logs --no-color postgres migrate api worker frontend
 
       - name: Clean up
         if: always()

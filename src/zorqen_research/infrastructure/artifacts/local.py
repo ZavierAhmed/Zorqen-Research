@@ -36,8 +36,16 @@ class LocalFilesystemArtifactStore:
     """
 
     def __init__(self, root: Path) -> None:
-        self._root = root.expanduser().resolve(strict=False)
-        self._root.mkdir(parents=True, exist_ok=True)
+        configured_root = root.expanduser()
+        if configured_root.exists() and configured_root.is_symlink():
+            msg = "Configured artifact root must not be a symlink"
+            raise ArtifactStoreError(msg)
+        configured_root.mkdir(parents=True, exist_ok=True)
+        # Account for a race where another process replaces the root with a symlink.
+        if configured_root.is_symlink():
+            msg = "Configured artifact root must not be a symlink"
+            raise ArtifactStoreError(msg)
+        self._root = configured_root.resolve(strict=True)
         self._root = self._require_real_directory(self._root, "root")
 
         self._objects = self._root / "objects"

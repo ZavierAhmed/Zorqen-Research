@@ -56,9 +56,11 @@ metadata with no-clobber semantics (recovery).
 
 ### Symlink containment
 
-The configured root and the `objects`, `meta`, and `tmp` directories must be real
-directories (not symlinks) remaining under the resolved artifact root. Nested
-path components and final object/metadata paths that are symlinks are rejected.
+The configured artifact root itself must not be a symlink; the store expands the
+user path and rejects symlink roots before resolving. The `objects`, `meta`,
+and `tmp` directories must also be real directories (not symlinks) remaining under
+the resolved artifact root. Nested path components and final object/metadata
+paths that are symlinks are rejected.
 
 ### Orphan objects after database rollback
 

@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.3): `78423ca2058686416845703e68396cf638a71f6f`
-- Milestone 0.3A base commit: `78423ca2058686416845703e68396cf638a71f6f`
+- Previous verified commit (Milestone 0.3A): `9be07a73183469de4bae352624f0bfcafc377d4e`
+- Milestone 0.3B base commit: `9be07a73183469de4bae352624f0bfcafc377d4e`
 - Milestone result commit: current HEAD containing this status update.
 - Exact SHA: report after commit.
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
@@ -26,106 +26,76 @@ It does not connect to exchanges, place paper/live trades, approve live deployme
 
 ## 3. Initial Strategy Scope
 
-### Primary
-
-- Adaptive Multi-Timeframe Trend Breakout (`adaptive_mtf_trend_breakout`)
-  - Stable UUID: `a1b2c3d4-e5f6-4789-a012-3456789abc01`
-
-### Secondary
-
-- Support and Resistance (`support_resistance`)
-  - Stable UUID: `a1b2c3d4-e5f6-4789-a012-3456789abc02`
-
-Registry metadata exists. Executable baseline behavior is not defined in Zorqen Research yet.
+Unchanged. Registry metadata only; executable baselines not defined.
 
 ## 4. Current Milestone
 
-- Milestone: `0.3A` — Close Artifact Immutability and Metadata Verification Gaps
+- Milestone: `0.3B` — Correct Docker Smoke Output Parsing and Root-Symlink Validation
 - Status: Complete pending independent review
-- Base: `78423ca2058686416845703e68396cf638a71f6f`
-- Corrective objective: no-clobber object/metadata publication, verified metadata, symlink containment, missing-metadata recovery; preserve Milestone 0.3 dataset behavior
+- Base: `9be07a73183469de4bae352624f0bfcafc377d4e`
+- Defects corrected:
+  - CI fixture step assumed pure JSON and did not explicitly build `dataset-fixture`
+  - Artifact store resolved configured root before detecting that the root path itself was a symlink
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
 ## 5. Latest Verified State
 
-- Artifact store publishes via atomic hard-link no-clobber (`os.link`); destinations are never replaced
-- First successfully persisted metadata wins; callers always reload verified metadata
-- `get_metadata` verifies key/hash/size/media type/filename/timestamp against object bytes; missing metadata raises until publish recovers
-- Symlink store dirs and nested escapes rejected
-- Dataset fixture/APIs/migration `0003` / Docker fixture workflow unchanged from 0.3
+- Workflow builds `dataset-fixture` explicitly with Compose profile
+- Fixture run uses `-T`; parser finds last valid `ok:true` JSON line; asserts expected manifest hash
+- Dataset API step compares content hash to fixture result hash
+- Failure diagnostics include `/tmp/fixture-output.log` plus compose logs
+- Configured artifact root symlink rejected before resolve; unit + filesystem coverage
+- Dataset fixture/APIs/migration behavior preserved from 0.3/0.3A
 - Manifest hash unchanged: `5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`
-- ADR 0003 amended for no-clobber, metadata rules, orphans, symlinks
-- No later milestone is authorized
 
-## 6. Frozen Product Decisions
+## 6–8. Product / Architecture / Research Engine
 
-Unchanged. Research authority only; no paper/live trading; separate from MOMO Quant.
-
-## 7. Architecture Direction
-
-See `docs/adr/0001-foundation-stack.md`, `docs/adr/0002-core-registry-and-audit.md`, and `docs/adr/0003-artifacts-and-dataset-manifests.md`.
-
-## 8. Research Engine Status
-
-- Campaign model: Not implemented
-- Strategy DSL / executable definitions: Not implemented
-- Data snapshots: Metadata + fixture foundation (0.3); artifact integrity hardened (0.3A); no network import
-- Backtest engine: Not implemented
-- Validation: Not implemented
-- Qualification policy: Not implemented
-- Candidate packages: Not implemented
-- MOMO Quant integration: Not implemented
-- Strategy-family metadata registry: Implemented (Milestone 0.2)
-- Audit-event append foundation: Implemented
-- Artifact store / dataset manifests: Implemented (0.3) and integrity-hardened (0.3A)
+Unchanged from Milestone 0.3A. No network import, candle query, strategy, campaign, or MOMO work.
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 0.3A.
+Awaiting independent review of Milestone 0.3B.
 No later milestone is authorized.
 
-## 10. Verification Evidence (Milestone 0.3A)
+## 10. Verification Evidence (Milestone 0.3B)
 
-Commands actually executed on the development machine:
+Commands actually executed:
 
 ```text
 uv sync --frozen --all-extras
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy src
-uv run pytest tests/unit -q                                          # 60 passed
-uv run pytest tests/integration/test_artifact_filesystem.py -q       # 8 passed
-uv run alembic upgrade head / downgrade 0002 / upgrade head /
-       downgrade base / upgrade head                                 # OK
-uv run pytest tests/integration -q -m integration                    # 24 passed
+uv run pytest tests/unit -q                                          # 62 passed
+uv run pytest tests/integration/test_artifact_filesystem.py -q       # 9 passed
+uv run pytest tests/integration -q -m integration                    # 25 passed
+alembic upgrade/downgrade round-trip through 0002 and base           # OK
 uv run zorqen-dataset publish-fixture                                # created=true
-uv run zorqen-dataset publish-fixture                                # created=false, same snapshot_id
+uv run zorqen-dataset publish-fixture                                # created=false, same snapshot
 uv run python -m zorqen_research.worker --check                      # OK
-cd frontend && npm ci && npm run lint && npm run test -- --run && npm run build  # 15 tests
-docker compose down -v / config / build / up
-docker compose --profile fixture run --rm --no-deps dataset-fixture
-curl nginx: health, strategy-families, datasets list/detail/manifest # OK
-docker compose logs inspected; docker compose down -v
+frontend npm ci / lint / test / build                                # 15 tests
+docker compose --profile fixture build api worker migrate frontend dataset-fixture
+docker compose up -d postgres migrate api worker frontend
+docker compose --profile fixture run --rm --no-deps -T dataset-fixture
+  → parsed last ok:true JSON; hash 5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80
+nginx datasets list/detail/manifest hash match                       # OK
+docker compose down -v
 ```
 
 Manifest hash (unchanged):
 
 `5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`
 
-GitHub Actions state: not observed (no push performed for this corrective milestone).
+GitHub Actions: not claimed until observed green after push (Ubuntu quality, Windows quality, PostgreSQL integration, Docker routing smoke).
 
-## 11. Known Defects and Limitations
+## 11. Known Limitations
 
-- Fixture publication is explicit CLI/Compose only; normal startup does not seed datasets
-- Artifact store is local filesystem only
-- Object publication may precede DB commit; rolled-back transactions can leave unreferenced immutable orphans (harmless/reusable; no GC in this milestone)
-- No candle-query or network market-data import
-- Real symlink filesystem tests skip when the OS denies symlink creation; rejection logic remains unit-covered
+- Real root-symlink filesystem tests skip when OS denies symlink creation; unit branch coverage remains
+- No later milestone authorized
 
 ## 12. Important Decisions
 
-- No-clobber hard-link publication instead of `os.replace` for immutable objects and metadata
-- First successfully persisted metadata wins for descriptive fields
-- Missing metadata is an error on read; publish recovers with no-clobber create
-- No later work (imports, candles, strategies, campaigns, MOMO, trading) is authorized
+- Parse fixture CLI JSON from mixed Docker output (last valid `ok:true` object)
+- Reject symlink artifact roots before `resolve`
+- Do not claim CI green without observing GitHub Actions

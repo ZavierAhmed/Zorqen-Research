@@ -189,6 +189,37 @@ def test_missing_metadata_raises_and_publish_recovers(tmp_path: Path) -> None:
     assert store.get_metadata(recovered.key) == recovered
 
 
+def test_configured_root_symlink_rejected(tmp_path: Path) -> None:
+    outside = tmp_path / "outside-root"
+    outside.mkdir()
+    linked_root = tmp_path / "linked-artifacts"
+    try:
+        linked_root.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("Symlink creation is not available on this platform")
+
+    with pytest.raises(ArtifactStoreError, match="Configured artifact root must not be a symlink"):
+        LocalFilesystemArtifactStore(linked_root)
+
+
+def test_configured_root_symlink_rejection_logic_unit() -> None:
+    class SymlinkRoot:
+        def expanduser(self) -> SymlinkRoot:
+            return self
+
+        def exists(self) -> bool:
+            return True
+
+        def is_symlink(self) -> bool:
+            return True
+
+        def mkdir(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("mkdir must not run when root is a symlink")
+
+    with pytest.raises(ArtifactStoreError, match="Configured artifact root must not be a symlink"):
+        LocalFilesystemArtifactStore(SymlinkRoot())  # type: ignore[arg-type]
+
+
 def test_symlink_store_directories_rejected(tmp_path: Path) -> None:
     root = tmp_path / "artifacts"
     root.mkdir()
