@@ -109,17 +109,23 @@ def test_definition_hash_mismatch_on_instance() -> None:
     definition = sample_definition()
     digest = hash_definition(definition)
     parameter_set = bind_default_parameter_set(definition, definition_hash=digest)
-    with pytest.raises(StrategyDefinitionValidationError, match="definition_hash"):
+    with pytest.raises(StrategyDefinitionValidationError, match="64 lowercase"):
         StrategyParameterSet(definition_hash="0" * 63, values=parameter_set.values)
+    with pytest.raises(StrategyDefinitionValidationError, match="placeholder"):
+        StrategyParameterSet(definition_hash="0" * 64, values=parameter_set.values)
+    forged_set = StrategyParameterSet(definition_hash="a" * 64, values=parameter_set.values)
+    assert forged_set.parameter_set_hash  # computed, not caller-supplied
     from zorqen_research.domain.strategy_definitions.instances import (
         StrategyInstanceSpecification,
     )
 
-    with pytest.raises(StrategyDefinitionValidationError, match="does not match"):
+    with pytest.raises(TypeError):
         StrategyInstanceSpecification(
             definition=definition,
             parameter_set=parameter_set,
-            definition_hash="a" * 64,
-            parameter_set_hash="b" * 64,
-            instance_hash="c" * 64,
+            definition_hash="a" * 64,  # type: ignore[call-arg]
+            parameter_set_hash="b" * 64,  # type: ignore[call-arg]
+            instance_hash="c" * 64,  # type: ignore[call-arg]
         )
+    with pytest.raises(StrategyDefinitionValidationError, match="does not match"):
+        StrategyInstanceSpecification(definition=definition, parameter_set=forged_set)

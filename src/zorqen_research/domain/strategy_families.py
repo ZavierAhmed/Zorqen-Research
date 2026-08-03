@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from types import MappingProxyType
 from uuid import UUID
 
 # Stable seed identifiers — identical on every installation (Milestone 0.2).
@@ -13,11 +15,12 @@ SUPPORT_RESISTANCE_ID = UUID("a1b2c3d4-e5f6-4789-a012-3456789abc02")
 ADAPTIVE_MTF_TREND_BREAKOUT_CODE = "adaptive_mtf_trend_breakout"
 SUPPORT_RESISTANCE_CODE = "support_resistance"
 
-# Exact seeded (family_id → family_code) pairs. No third family.
-SEEDED_FAMILY_PAIRS: dict[UUID, str] = {
-    ADAPTIVE_MTF_TREND_BREAKOUT_ID: ADAPTIVE_MTF_TREND_BREAKOUT_CODE,
-    SUPPORT_RESISTANCE_ID: SUPPORT_RESISTANCE_CODE,
-}
+# Exact seeded pairs. Runtime-immutable mapping (no third family).
+_SEEDED_FAMILY_PAIR_ITEMS: tuple[tuple[UUID, str], ...] = (
+    (ADAPTIVE_MTF_TREND_BREAKOUT_ID, ADAPTIVE_MTF_TREND_BREAKOUT_CODE),
+    (SUPPORT_RESISTANCE_ID, SUPPORT_RESISTANCE_CODE),
+)
+SEEDED_FAMILY_PAIRS: Mapping[UUID, str] = MappingProxyType(dict(_SEEDED_FAMILY_PAIR_ITEMS))
 
 
 def require_seeded_family_pair(*, family_id: UUID, family_code: str) -> None:

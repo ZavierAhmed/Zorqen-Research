@@ -59,3 +59,24 @@ def test_missing_file_exits_nonzero(capsys: pytest.CaptureFixture[str]) -> None:
     assert code == 1
     err = json.loads(capsys.readouterr().err)
     assert err["ok"] is False
+
+
+def test_cli_adversarial_json_exits_sanitized(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sys
+
+    cases: list[bytes] = []
+    digits = "1" + ("0" * sys.get_int_max_str_digits())
+    cases.append(f'{{"schema_version":{digits}}}'.encode())
+    cases.append(b"{" + (b'"a":{' * 5000) + b'"x":1' + (b"}" * 5000) + b"}")
+    cases.append(b'{"schema_version":"1","display_name":"\\ud800"}')
+    for index, raw in enumerate(cases):
+        path = tmp_path / f"adv_{index}.json"
+        path.write_bytes(raw)
+        code = main(["validate-definition", "--file", str(path)])
+        assert code == 1
+        err = json.loads(capsys.readouterr().err)
+        assert err["ok"] is False
+        assert "error" in err
+        assert "Traceback" not in err["error"]

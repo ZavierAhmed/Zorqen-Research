@@ -13,6 +13,7 @@ from zorqen_research.domain.strategy_definitions.identifiers import (
     MAX_ENUM_CHOICE_LENGTH,
     require_canonical_identifier,
     require_display_text,
+    require_unicode_scalars,
 )
 
 
@@ -243,16 +244,17 @@ class EnumParameterDefinition:
             raise StrategyDefinitionValidationError(msg)
         cleaned: list[str] = []
         seen: set[str] = set()
+        if type(self.default_value) is not str:
+            msg = "parameter.default_value must be a real str"
+            raise StrategyDefinitionValidationError(msg)
         for choice in self.choices:
-            if not isinstance(choice, str):
-                msg = "parameter.choices must be strings"
+            if type(choice) is not str:
+                msg = "parameter.choices must be real str values"
                 raise StrategyDefinitionValidationError(msg)
             if not choice or choice != choice.strip():
                 msg = "parameter.choices must be trimmed non-empty strings"
                 raise StrategyDefinitionValidationError(msg)
-            if "\x00" in choice:
-                msg = "parameter.choices must not contain NUL characters"
-                raise StrategyDefinitionValidationError(msg)
+            require_unicode_scalars(choice, field="parameter.choices")
             if len(choice) > MAX_ENUM_CHOICE_LENGTH:
                 msg = f"parameter.choices exceed maximum length {MAX_ENUM_CHOICE_LENGTH}"
                 raise StrategyDefinitionValidationError(msg)
@@ -261,6 +263,7 @@ class EnumParameterDefinition:
                 raise StrategyDefinitionValidationError(msg)
             seen.add(choice)
             cleaned.append(choice)
+        require_unicode_scalars(self.default_value, field="parameter.default_value")
         if self.default_value not in cleaned:
             msg = "parameter.default_value must exactly equal one choice"
             raise StrategyDefinitionValidationError(msg)
@@ -270,9 +273,10 @@ class EnumParameterDefinition:
         return ParameterKind.ENUM
 
     def validate_value(self, value: object) -> str:
-        if not isinstance(value, str):
-            msg = f"parameters.{self.key} must be a string"
+        if type(value) is not str:
+            msg = f"parameters.{self.key} must be a real str"
             raise StrategyDefinitionValidationError(msg)
+        require_unicode_scalars(value, field=f"parameters.{self.key}")
         if value not in self.choices:
             msg = f"parameters.{self.key} must equal one of the defined choices"
             raise StrategyDefinitionValidationError(msg)

@@ -1,4 +1,4 @@
-"""Identifier, version, text, and hash validation helpers."""
+"""Identifier, version, text, Unicode, and hash validation helpers."""
 
 from __future__ import annotations
 
@@ -15,10 +15,45 @@ MAX_ENUM_CHOICE_LENGTH = 64
 MAX_JSON_BYTES = 1 << 20  # 1 MiB
 MAX_WARMUP_BARS = 1_000_000
 NIL_UUID = UUID(int=0)
+_ALL_ZERO_HASH = "0" * 64
 
 _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _VERSION_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def require_unicode_scalars(value: str, *, field: str) -> str:
+    """Reject NUL and lone UTF-16 surrogate code points (U+D800–U+DFFF)."""
+    if "\x00" in value:
+        msg = f"{field} must not contain NUL characters"
+        raise StrategyDefinitionValidationError(msg)
+    for index, char in enumerate(value):
+        code = ord(char)
+        if 0xD800 <= code <= 0xDFFF:
+            msg = f"{field} must not contain lone Unicode surrogate code points"
+            raise StrategyDefinitionValidationError(msg)
+        _ = index
+    return value
+
+
+def require_canonical_sha256(value: object, *, field: str) -> str:
+    """Require exactly 64 lowercase hex characters (no prefix/whitespace)."""
+    if not isinstance(value, str):
+        msg = f"{field} must be a string"
+        raise StrategyDefinitionValidationError(msg)
+    if not _SHA256_RE.fullmatch(value):
+        msg = f"{field} must be exactly 64 lowercase hexadecimal characters"
+        raise StrategyDefinitionValidationError(msg)
+    return value
+
+
+def require_logical_sha256(value: object, *, field: str) -> str:
+    """Canonical SHA-256 for computed logical hashes; rejects all-zero placeholders."""
+    digest = require_canonical_sha256(value, field=field)
+    if digest == _ALL_ZERO_HASH:
+        msg = f"{field} must not be a placeholder all-zero hash"
+        raise StrategyDefinitionValidationError(msg)
+    return digest
 
 
 def require_canonical_identifier(value: object, *, field: str) -> str:
@@ -34,6 +69,7 @@ def require_canonical_identifier(value: object, *, field: str) -> str:
     if not _IDENTIFIER_RE.fullmatch(value):
         msg = f"{field} must be canonical lower_snake_case: {value!r}"
         raise StrategyDefinitionValidationError(msg)
+    require_unicode_scalars(value, field=field)
     return value
 
 
@@ -44,9 +80,7 @@ def require_display_text(value: object, *, field: str, max_length: int) -> str:
     if not value or value != value.strip():
         msg = f"{field} must be a non-empty trimmed string"
         raise StrategyDefinitionValidationError(msg)
-    if "\x00" in value:
-        msg = f"{field} must not contain NUL characters"
-        raise StrategyDefinitionValidationError(msg)
+    require_unicode_scalars(value, field=field)
     if len(value) > max_length:
         msg = f"{field} exceeds maximum length {max_length}"
         raise StrategyDefinitionValidationError(msg)
@@ -74,16 +108,7 @@ def require_definition_uuid(value: object, *, field: str = "definition_id") -> U
 
 
 def require_source_spec_sha256(value: object) -> str:
-    if not isinstance(value, str):
-        msg = "source_spec_sha256 must be a string"
-        raise StrategyDefinitionValidationError(msg)
-    if not _SHA256_RE.fullmatch(value):
-        msg = "source_spec_sha256 must be exactly 64 lowercase hex characters"
-        raise StrategyDefinitionValidationError(msg)
-    if value == "0" * 64:
-        msg = "source_spec_sha256 must not be a placeholder all-zero hash"
-        raise StrategyDefinitionValidationError(msg)
-    return value
+    return require_logical_sha256(value, field="source_spec_sha256")
 
 
 def parse_uuid_string(value: object, *, field: str) -> UUID:

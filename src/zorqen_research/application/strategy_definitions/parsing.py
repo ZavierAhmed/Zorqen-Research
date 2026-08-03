@@ -72,12 +72,18 @@ def loads_strict_json(raw: bytes, *, field: str = "document") -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         msg = f"{field} is not valid JSON"
         raise StrategyDefinitionParseError(msg) from exc
+    except RecursionError as exc:
+        msg = f"{field} exceeds maximum JSON nesting depth"
+        raise StrategyDefinitionParseError(msg) from exc
+    except ValueError as exc:
+        msg = f"{field} contains an invalid JSON value"
+        raise StrategyDefinitionParseError(msg) from exc
+    except OverflowError as exc:
+        msg = f"{field} contains an out-of-range JSON value"
+        raise StrategyDefinitionParseError(msg) from exc
     if not isinstance(document, dict):
         msg = f"{field} must be a JSON object"
         raise StrategyDefinitionParseError(msg)
-    # Reject trailing non-whitespace by requiring a full re-dump parse equality
-    # against a single json.loads consumption (stdlib already consumes trailing
-    # whitespace only). Detect extra tokens via decoder.raw_decode.
     decoder = json.JSONDecoder(
         object_pairs_hook=_object_pairs_hook, parse_constant=_reject_nonfinite
     )
@@ -85,6 +91,15 @@ def loads_strict_json(raw: bytes, *, field: str = "document") -> dict[str, Any]:
         _, end = decoder.raw_decode(text)
     except json.JSONDecodeError as exc:
         msg = f"{field} is not valid JSON"
+        raise StrategyDefinitionParseError(msg) from exc
+    except RecursionError as exc:
+        msg = f"{field} exceeds maximum JSON nesting depth"
+        raise StrategyDefinitionParseError(msg) from exc
+    except ValueError as exc:
+        msg = f"{field} contains an invalid JSON value"
+        raise StrategyDefinitionParseError(msg) from exc
+    except OverflowError as exc:
+        msg = f"{field} contains an out-of-range JSON value"
         raise StrategyDefinitionParseError(msg) from exc
     if text[end:].strip():
         msg = f"{field} contains trailing non-whitespace content"
