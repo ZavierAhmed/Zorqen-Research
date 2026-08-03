@@ -8,10 +8,10 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.2): `f7a8064654873a234b078d1fbc6bffd1c5e1d79f`
-- Milestone 0.3 base commit: `f7a8064654873a234b078d1fbc6bffd1c5e1d79f`
+- Previous verified commit (Milestone 0.3): `78423ca2058686416845703e68396cf638a71f6f`
+- Milestone 0.3A base commit: `78423ca2058686416845703e68396cf638a71f6f`
 - Milestone result commit: current HEAD containing this status update.
-- Exact SHA: report after commit and record as the previous verified commit during the next status update.
+- Exact SHA: report after commit.
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
 - Current environment: Windows development laptop
 - Target deployment: Windows or Linux VPS
@@ -40,25 +40,23 @@ Registry metadata exists. Executable baseline behavior is not defined in Zorqen 
 
 ## 4. Current Milestone
 
-- Milestone: `0.3` — Immutable Artifact Storage and Dataset Manifest Foundation
+- Milestone: `0.3A` — Close Artifact Immutability and Metadata Verification Gaps
 - Status: Complete pending independent review
-- Objective: Local content-addressed artifact store, dataset snapshot/partition metadata, canonical manifests, fixture CLI, read-only dataset APIs, migration `0003`, Docker/CI verification
+- Base: `78423ca2058686416845703e68396cf638a71f6f`
+- Corrective objective: no-clobber object/metadata publication, verified metadata, symlink containment, missing-metadata recovery; preserve Milestone 0.3 dataset behavior
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
 ## 5. Latest Verified State
 
-- Local SHA-256 content-addressed artifact store under `ZORQEN_ARTIFACT_ROOT` (atomic publish, no overwrite/delete API)
-- Tables: `dataset_snapshots`, `dataset_partitions` via Alembic `0003_dataset_manifest_foundation`
-- Canonical market `binance_futures`; symbols `BTCUSDT`/`ETHUSDT`/`BNBUSDT`; timeframes `1m`…`1w`
-- Fixture CLI: `uv run zorqen-dataset publish-fixture` (idempotent on identical logical content)
-- APIs: `GET /api/v1/datasets`, `GET /api/v1/datasets/{id}`, `GET /api/v1/datasets/{id}/manifest`
-- Audit: `dataset_snapshot.published` appends in the same DB transaction; nested non-JSON payloads rejected
-- Docker: `dataset-fixture` Compose profile one-shot; artifact volume shared by API/worker
-- CI docker-routing-smoke extended with fixture publish + dataset nginx checks
-- ADR: `docs/adr/0003-artifacts-and-dataset-manifests.md`
-- Tests (this verification pass): backend unit 53 + integration 19; frontend 15
-- Not implemented: Binance download, candle-query API, backtester, strategies, campaigns, candidates, MOMO
+- Artifact store publishes via atomic hard-link no-clobber (`os.link`); destinations are never replaced
+- First successfully persisted metadata wins; callers always reload verified metadata
+- `get_metadata` verifies key/hash/size/media type/filename/timestamp against object bytes; missing metadata raises until publish recovers
+- Symlink store dirs and nested escapes rejected
+- Dataset fixture/APIs/migration `0003` / Docker fixture workflow unchanged from 0.3
+- Manifest hash unchanged: `5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`
+- ADR 0003 amended for no-clobber, metadata rules, orphans, symlinks
+- No later milestone is authorized
 
 ## 6. Frozen Product Decisions
 
@@ -72,21 +70,22 @@ See `docs/adr/0001-foundation-stack.md`, `docs/adr/0002-core-registry-and-audit.
 
 - Campaign model: Not implemented
 - Strategy DSL / executable definitions: Not implemented
-- Data snapshots: Metadata + fixture foundation implemented (Milestone 0.3); no network import
+- Data snapshots: Metadata + fixture foundation (0.3); artifact integrity hardened (0.3A); no network import
 - Backtest engine: Not implemented
 - Validation: Not implemented
 - Qualification policy: Not implemented
 - Candidate packages: Not implemented
 - MOMO Quant integration: Not implemented
 - Strategy-family metadata registry: Implemented (Milestone 0.2)
-- Audit-event append foundation: Implemented (hardened JSON payload validation in 0.3)
-- Artifact store / dataset manifests: Implemented (Milestone 0.3)
+- Audit-event append foundation: Implemented
+- Artifact store / dataset manifests: Implemented (0.3) and integrity-hardened (0.3A)
 
 ## 9. Outstanding Work
 
-Authorized next milestone work only (not started): market-data import beyond fixtures, candle tooling, strategies, campaigns, etc., per product roadmap.
+Awaiting independent review of Milestone 0.3A.
+No later milestone is authorized.
 
-## 10. Verification Evidence (Milestone 0.3)
+## 10. Verification Evidence (Milestone 0.3A)
 
 Commands actually executed on the development machine:
 
@@ -95,42 +94,38 @@ uv sync --frozen --all-extras
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy src
-uv run pytest tests/unit -q                          # 53 passed
-uv run pytest tests/integration -q -m integration    # 19 passed
-uv run alembic upgrade head
-uv run alembic downgrade 0002_core_registry_and_audit
-uv run alembic upgrade head
-uv run alembic downgrade base
-uv run alembic upgrade head
-uv run zorqen-dataset publish-fixture                # created=true
-uv run zorqen-dataset publish-fixture                # created=false (idempotent)
-uv run python -m zorqen_research.worker --check
+uv run pytest tests/unit -q                                          # 60 passed
+uv run pytest tests/integration/test_artifact_filesystem.py -q       # 8 passed
+uv run alembic upgrade head / downgrade 0002 / upgrade head /
+       downgrade base / upgrade head                                 # OK
+uv run pytest tests/integration -q -m integration                    # 24 passed
+uv run zorqen-dataset publish-fixture                                # created=true
+uv run zorqen-dataset publish-fixture                                # created=false, same snapshot_id
+uv run python -m zorqen_research.worker --check                      # OK
 cd frontend && npm ci && npm run lint && npm run test -- --run && npm run build  # 15 tests
-docker compose down -v
-docker compose config --quiet
-docker compose build api worker migrate frontend
-docker compose up -d postgres migrate api worker frontend
+docker compose down -v / config / build / up
 docker compose --profile fixture run --rm --no-deps dataset-fixture
-curl through nginx: health live/ready, strategy-families, datasets list/detail/manifest
-docker compose logs --no-color postgres migrate api worker frontend
-docker compose down -v
+curl nginx: health, strategy-families, datasets list/detail/manifest # OK
+docker compose logs inspected; docker compose down -v
 ```
 
-Manifest hash observed for the packaged BTCUSDT 1h fixture:
+Manifest hash (unchanged):
 
 `5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`
 
-GitHub Actions state: not observed from this machine after push (no push performed for this milestone).
+GitHub Actions state: not observed (no push performed for this corrective milestone).
 
 ## 11. Known Defects and Limitations
 
 - Fixture publication is explicit CLI/Compose only; normal startup does not seed datasets
 - Artifact store is local filesystem only
+- Object publication may precede DB commit; rolled-back transactions can leave unreferenced immutable orphans (harmless/reusable; no GC in this milestone)
 - No candle-query or network market-data import
-- Application-level published immutability; DB role revoke of UPDATE is deferred
+- Real symlink filesystem tests skip when the OS denies symlink creation; rejection logic remains unit-covered
 
 ## 12. Important Decisions
 
-- Large candle bytes stay out of PostgreSQL; metadata references content-addressed artifact keys
-- Manifest `content_hash` covers logical content (excludes snapshot id and publication timestamp) so fixture republication is idempotent
-- `.gitignore` uses `/artifacts/` so the Python package `infrastructure/artifacts` is tracked
+- No-clobber hard-link publication instead of `os.replace` for immutable objects and metadata
+- First successfully persisted metadata wins for descriptive fields
+- Missing metadata is an error on read; publish recovers with no-clobber create
+- No later work (imports, candles, strategies, campaigns, MOMO, trading) is authorized

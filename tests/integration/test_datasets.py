@@ -334,10 +334,15 @@ async def test_fixture_publication_api_and_idempotency(
             assert part.timeframe == "1h"
             assert part.row_count == 5
             artifact_bytes = store.open_bytes(part.artifact_key)
-            assert store.get_metadata(part.artifact_key).sha256 == part.sha256
+            verified_meta = store.get_metadata(part.artifact_key)
+            assert verified_meta.sha256 == part.sha256
+            assert verified_meta.key == part.artifact_key
+            assert verified_meta.byte_size == part.byte_size
             from zorqen_research.domain.artifacts import sha256_hex
 
             assert sha256_hex(artifact_bytes) == part.sha256
+            assert sha256_hex(artifact_bytes) == verified_meta.sha256
+            assert len(artifact_bytes) == verified_meta.byte_size
 
             audits = await session.execute(
                 text(

@@ -56,7 +56,15 @@ docs/adr           Architecture decision records
 
 ## Artifact storage and dataset manifests
 
-PostgreSQL stores dataset **snapshot** and **partition** metadata only. Large files live in the local artifact store under `ZORQEN_ARTIFACT_ROOT` as SHA-256 content-addressed objects (`sha256/ab/cd/<digest>`). Publication is atomic (temp file → flush → replace). Published artifacts are immutable (no overwrite/delete API).
+PostgreSQL stores dataset **snapshot** and **partition** metadata only. Large files live in the local artifact store under `ZORQEN_ARTIFACT_ROOT` as SHA-256 content-addressed objects (`sha256/ab/cd/<digest>`).
+
+Publication is atomic and **no-clobber**: bytes are written to a temp file, flushed, then linked into the final path with `os.link` (existing destinations are never replaced). Identical concurrent publishes reuse content; different bytes under the same key raise a sanitized collision error.
+
+**Metadata rule:** first successfully persisted metadata wins (media type / original filename). Later publications do not replace it. `get_metadata` always verifies the stored record against actual object bytes. Missing metadata raises until a publish recovers it with no-clobber semantics.
+
+**Orphans:** artifact objects may be written before a dataset DB commit. A rolled-back transaction can leave an unreferenced immutable object; that is harmless and reusable. There is no delete/GC API in this milestone.
+
+Published artifacts have no overwrite/delete API. Store directories (`objects`, `meta`, `tmp`) must not be symlinks escaping the configured root.
 
 Terminology:
 
