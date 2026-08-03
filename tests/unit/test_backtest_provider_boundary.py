@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -55,6 +56,18 @@ def _two_bars() -> tuple[Candle, Candle]:
     return _candle(t0), _candle(t0 + timedelta(hours=1))
 
 
+def _valid_enter(decision_time: datetime | None = None) -> EnterIntent:
+    t0 = decision_time or datetime(2026, 6, 1, tzinfo=UTC)
+    return EnterIntent(
+        intent_id="e1",
+        decision_open_time=t0,
+        direction=PositionDirection.LONG,
+        quantity=Decimal("1.000"),
+        stop_loss=Decimal("90"),
+        take_profit=Decimal("150"),
+    )
+
+
 class _FixedProvider:
     def __init__(self, value: object) -> None:
         self.value = value
@@ -66,58 +79,121 @@ class _FixedProvider:
 
 
 class _RaisingProvider:
-    def __init__(self) -> None:
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
         self.calls = 0
 
     def on_bar_close(self, context: BacktestDecisionContext) -> object:
         self.calls += 1
-        msg = "provider boom"
-        raise RuntimeError(msg)
+        raise self.exc
 
 
-def test_provider_none_rejected() -> None:
-    provider = _FixedProvider(None)
-    with pytest.raises(BacktestValidationError, match="None"):
+@pytest.mark.parametrize(
+    "exc",
+    [
+        RuntimeError("provider boom"),
+        ValueError("bad value"),
+        TypeError("bad type"),
+        BacktestValidationError("provider validation"),
+        BacktestExecutionError("provider execution"),
+    ],
+)
+def test_provider_exceptions_always_wrapped(exc: BaseException) -> None:
+    provider = _RaisingProvider(exc)
+    with pytest.raises(BacktestExecutionError, match="^Decision provider failed$") as excinfo:
+        _engine(provider).run(_two_bars())
+    assert excinfo.value.__cause__ is exc
+    assert str(excinfo.value) == "Decision provider failed"
+    assert provider.calls == 1
+
+
+def test_provider_not_called_again_after_failure() -> None:
+    provider = _RaisingProvider(RuntimeError("boom"))
+    with pytest.raises(BacktestExecutionError, match="Decision provider failed"):
         _engine(provider).run(_two_bars())
     assert provider.calls == 1
 
 
-def test_provider_string_rejected() -> None:
-    with pytest.raises(BacktestValidationError, match="string"):
-        _engine(_FixedProvider("not-intents")).run(_two_bars())
+def test_empty_tuple_succeeds() -> None:
+    result = _engine(_FixedProvider(())).run(_two_bars())
+    assert result.fills == ()
+    assert result.summary.final_equity == Decimal("10000")
 
 
-def test_provider_non_iterable_rejected() -> None:
-    with pytest.raises(BacktestValidationError, match="iterable"):
-        _engine(_FixedProvider(42)).run(_two_bars())
+def test_one_item_tuple_succeeds() -> None:
+    t0 = datetime(2026, 6, 1, tzinfo=UTC)
+    enter = _valid_enter(t0)
+    calls = {"n": 0}
+
+    class Provider:
+        def on_bar_close(self, context: BacktestDecisionContext) -> object:
+            calls["n"] += 1
+            if context.bar_index == 0:
+                return (enter,)
+            return ()
+
+    result = _engine(Provider()).run(_two_bars())
+    assert result.fills[0].intent_id == "e1"
+    assert result.fills[0].reason.value == "market_entry"
+    assert calls["n"] == 2
 
 
-def test_provider_exception_wrapped() -> None:
-    provider = _RaisingProvider()
-    with pytest.raises(BacktestExecutionError, match="Decision provider failed") as excinfo:
+def test_two_item_tuple_rejected() -> None:
+    t0 = datetime(2026, 6, 1, tzinfo=UTC)
+    enter = _valid_enter(t0)
+    exit_intent = ExitIntent(intent_id="x1", decision_open_time=t0)
+    with pytest.raises(BacktestValidationError, match="At most one"):
+        _engine(_FixedProvider((enter, exit_intent))).run(_two_bars())
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        42,
+        "not-intents",
+        b"bytes",
+        bytearray(b"bytes"),
+        {"intent": "no"},
+        {1, 2},
+        [_valid_enter()],
+    ],
+)
+def test_non_tuple_containers_rejected(value: object) -> None:
+    provider = _FixedProvider(value)
+    with pytest.raises(BacktestValidationError, match="tuple of intents"):
         _engine(provider).run(_two_bars())
-    assert isinstance(excinfo.value.__cause__, RuntimeError)
+    assert provider.calls == 1
+
+
+def test_generator_rejected_without_consumption() -> None:
+    consumed: list[int] = []
+
+    def gen() -> Iterator[EnterIntent]:
+        consumed.append(1)
+        yield _valid_enter()
+
+    provider = _FixedProvider(gen())
+    with pytest.raises(BacktestValidationError, match="tuple of intents"):
+        _engine(provider).run(_two_bars())
+    assert consumed == []
+    assert provider.calls == 1
+
+
+def test_infinite_generator_rejected_immediately() -> None:
+    def infinite() -> Iterator[int]:
+        while True:
+            yield 1
+
+    provider = _FixedProvider(infinite())
+    with pytest.raises(BacktestValidationError, match="tuple of intents"):
+        _engine(provider).run(_two_bars())
     assert provider.calls == 1
 
 
 def test_provider_unknown_object_rejected() -> None:
     with pytest.raises(BacktestValidationError, match="Unknown intent"):
         _engine(_FixedProvider((object(),))).run(_two_bars())
-
-
-def test_provider_multiple_intents_rejected() -> None:
-    t0 = datetime(2026, 6, 1, tzinfo=UTC)
-    enter = EnterIntent(
-        intent_id="e1",
-        decision_open_time=t0,
-        direction=PositionDirection.LONG,
-        quantity=Decimal("1.000"),
-        stop_loss=Decimal("90"),
-        take_profit=Decimal("150"),
-    )
-    exit_intent = ExitIntent(intent_id="x1", decision_open_time=t0)
-    with pytest.raises(BacktestValidationError, match="At most one"):
-        _engine(_FixedProvider((enter, exit_intent))).run(_two_bars())
 
 
 def test_malformed_decision_time_runtime_type() -> None:
@@ -198,14 +274,7 @@ def test_whitespace_intent_id_rejected() -> None:
 
 def test_corrupted_intent_from_provider_sanitized() -> None:
     t0 = datetime(2026, 6, 1, tzinfo=UTC)
-    enter = EnterIntent(
-        intent_id="e1",
-        decision_open_time=t0,
-        direction=PositionDirection.LONG,
-        quantity=Decimal("1.000"),
-        stop_loss=Decimal("90"),
-        take_profit=Decimal("150"),
-    )
+    enter = _valid_enter(t0)
     object.__setattr__(enter, "quantity", "bad")
 
     class Provider:
@@ -214,6 +283,16 @@ def test_corrupted_intent_from_provider_sanitized() -> None:
 
     with pytest.raises(BacktestValidationError):
         _engine(Provider()).run(_two_bars())
+
+
+def test_failure_produces_no_fills_or_trades() -> None:
+    provider = _RaisingProvider(RuntimeError("boom"))
+    with pytest.raises(BacktestExecutionError):
+        _engine(provider).run(_two_bars())
+    assert provider.calls == 1
+    ok = _engine(ScriptedDecisionProvider({})).run(_two_bars())
+    assert ok.fills == ()
+    assert ok.trades == ()
 
 
 def test_scripted_empty_still_ok() -> None:

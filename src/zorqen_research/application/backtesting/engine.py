@@ -304,32 +304,29 @@ class BacktestEngine:
         return tuple(out)
 
     def _invoke_provider(self, context: BacktestDecisionContext) -> tuple[object, ...]:
+        # Stage 1: provider execution — every exception is sanitized.
         try:
             raw = self._provider.on_bar_close(context)
-        except (BacktestValidationError, BacktestExecutionError):
-            raise
         except Exception as exc:
             msg = "Decision provider failed"
             raise BacktestExecutionError(msg) from exc
+        # Stage 2: engine-owned output validation (may raise BacktestValidationError).
         return self._coerce_provider_output(raw)
 
     def _coerce_provider_output(self, raw: object) -> tuple[object, ...]:
-        if raw is None:
-            msg = "Decision provider must return a sequence of intents, not None"
+        """
+        Exact-tuple contract: never iterate or materialize arbitrary provider output.
+
+        Empty tuple → no intent. One-item tuple → candidate intent.
+        Two or more → validation failure. Non-tuples → validation failure.
+        """
+        if not isinstance(raw, tuple):
+            msg = "Decision provider must return a tuple of intents"
             raise BacktestValidationError(msg)
-        if isinstance(raw, (str, bytes, bytearray)):
-            msg = "Decision provider must return a sequence of intents, not a string/bytes"
+        if len(raw) > 1:
+            msg = "At most one intent may be returned per decision event"
             raise BacktestValidationError(msg)
-        try:
-            iterator = iter(raw)  # type: ignore[call-overload]
-        except TypeError as exc:
-            msg = "Decision provider must return an iterable sequence of intents"
-            raise BacktestValidationError(msg) from exc
-        try:
-            return tuple(iterator)
-        except TypeError as exc:
-            msg = "Decision provider returned a non-materializable sequence"
-            raise BacktestValidationError(msg) from exc
+        return raw
 
     def _validate_and_select_intent(
         self,
