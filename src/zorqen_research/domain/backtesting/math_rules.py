@@ -17,6 +17,15 @@ def require_finite_decimal(value: object, *, field: str) -> Decimal:
     return value
 
 
+def require_positive_price(value: object, *, field: str) -> Decimal:
+    """Require a finite Decimal strictly greater than zero (post-normalization)."""
+    price = require_finite_decimal(value, field=field)
+    if price <= 0:
+        msg = f"{field} must be a finite Decimal strictly greater than zero"
+        raise BacktestValidationError(msg)
+    return price
+
+
 def is_quantity_aligned(quantity: Decimal, quantity_step: Decimal) -> bool:
     return quantity % quantity_step == Decimal("0")
 

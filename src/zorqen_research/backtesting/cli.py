@@ -7,6 +7,7 @@ import json
 import sys
 
 from zorqen_research.application.backtesting.golden import SCENARIOS, run_scenario
+from zorqen_research.application.backtesting.golden_expectations import GoldenMismatchError
 from zorqen_research.application.market_data.serialization import format_canonical_decimal
 
 
@@ -24,6 +25,13 @@ def _run_one(name: str) -> tuple[bool, dict[str, object]]:
         result = run_scenario(name)
     except KeyError:
         return False, {"ok": False, "scenario": name, "error": "unknown_scenario"}
+    except GoldenMismatchError as exc:
+        return False, {
+            "ok": False,
+            "scenario": name,
+            "error": "golden_mismatch",
+            "detail": str(exc),
+        }
     except Exception as exc:  # noqa: BLE001 — CLI boundary
         return False, {"ok": False, "scenario": name, "error": str(exc)}
     payload = {
@@ -60,10 +68,10 @@ def main(argv: list[str] | None = None) -> int:
         failures = 0
         for name in sorted(SCENARIOS):
             ok, payload = _run_one(name)
+            # Always emit one structured JSON line per scenario (stdout).
             print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
             if not ok:
                 failures += 1
-                print(payload.get("error", "failed"), file=sys.stderr)
         return 0 if failures == 0 else 1
 
     ok, payload = _run_one(args.scenario)

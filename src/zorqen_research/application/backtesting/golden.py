@@ -7,6 +7,10 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from zorqen_research.application.backtesting.engine import BacktestEngine
+from zorqen_research.application.backtesting.golden_expectations import (
+    GOLDEN_EXPECTATIONS,
+    assert_matches_expectation,
+)
 from zorqen_research.application.backtesting.scripted import ScriptedDecisionProvider
 from zorqen_research.domain.backtesting.enums import (
     FillReason,
@@ -283,6 +287,7 @@ SCENARIOS: dict[str, GoldenScenario] = {
 
 def run_scenario(name: str) -> BacktestResult:
     scenario = SCENARIOS[name]
+    expected = GOLDEN_EXPECTATIONS[name]
     engine = BacktestEngine(
         symbol=parse_symbol("BTCUSDT"),
         timeframe=Timeframe.H1,
@@ -290,20 +295,5 @@ def run_scenario(name: str) -> BacktestResult:
         provider=scenario.provider,
     )
     result = engine.run(scenario.candles)
-    if result.summary.closed_trade_count != scenario.expected_closed_trades:
-        msg = (
-            f"Scenario {name}: expected {scenario.expected_closed_trades} trades, "
-            f"got {result.summary.closed_trade_count}"
-        )
-        raise AssertionError(msg)
-    if scenario.expected_exit_reason is not None:
-        assert result.trades[0].exit_reason is scenario.expected_exit_reason
-    if result.summary.unfilled_intent_count != scenario.expected_unfilled:
-        msg = f"Scenario {name}: unexpected unfilled count"
-        raise AssertionError(msg)
-    if name == "same-bar-stop-first":
-        assert result.trades[0].same_bar_ambiguity_used is True
-    # Equity reconciliation.
-    assert result.summary.final_equity == (result.summary.initial_equity + result.summary.net_pnl)
-    assert result.summary.total_fees == sum((f.fee for f in result.fills), Decimal("0"))
+    assert_matches_expectation(result, expected)
     return result

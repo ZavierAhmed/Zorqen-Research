@@ -42,6 +42,7 @@ from zorqen_research.domain.backtesting.math_rules import (
     normalize_sell_fill,
     normalize_short_stop,
     normalize_short_target,
+    require_positive_price,
 )
 from zorqen_research.domain.backtesting.policy import BacktestPolicy
 from zorqen_research.domain.backtesting.results import (
@@ -194,7 +195,7 @@ class BacktestEngine:
                 last_closed_trade=trades[-1] if trades else None,
                 candles_processed=bar_index + 1,
             )
-            intents = self._provider.on_bar_close(context)
+            intents = self._invoke_provider(context)
             pending = self._validate_and_select_intent(
                 intents,
                 decision_open_time=candle.open_time,
@@ -302,9 +303,37 @@ class BacktestEngine:
             out.append(candle)
         return tuple(out)
 
+    def _invoke_provider(self, context: BacktestDecisionContext) -> tuple[object, ...]:
+        try:
+            raw = self._provider.on_bar_close(context)
+        except (BacktestValidationError, BacktestExecutionError):
+            raise
+        except Exception as exc:
+            msg = "Decision provider failed"
+            raise BacktestExecutionError(msg) from exc
+        return self._coerce_provider_output(raw)
+
+    def _coerce_provider_output(self, raw: object) -> tuple[object, ...]:
+        if raw is None:
+            msg = "Decision provider must return a sequence of intents, not None"
+            raise BacktestValidationError(msg)
+        if isinstance(raw, (str, bytes, bytearray)):
+            msg = "Decision provider must return a sequence of intents, not a string/bytes"
+            raise BacktestValidationError(msg)
+        try:
+            iterator = iter(raw)  # type: ignore[call-overload]
+        except TypeError as exc:
+            msg = "Decision provider must return an iterable sequence of intents"
+            raise BacktestValidationError(msg) from exc
+        try:
+            return tuple(iterator)
+        except TypeError as exc:
+            msg = "Decision provider returned a non-materializable sequence"
+            raise BacktestValidationError(msg) from exc
+
     def _validate_and_select_intent(
         self,
-        intents: tuple[BacktestIntent, ...] | Sequence[BacktestIntent],
+        intents: tuple[object, ...] | Sequence[object],
         *,
         decision_open_time: object,
         has_position: bool,
@@ -317,27 +346,33 @@ class BacktestEngine:
         if not items:
             return None
         intent = items[0]
-        if isinstance(intent, EnterIntent):
-            intent.validate_for_policy(self._policy)
-            if intent.decision_open_time != decision_open_time:
-                msg = "Enter intent decision_open_time must match the decision candle"
-                raise BacktestValidationError(msg)
-            if has_position:
-                msg = "Entry rejected while a position is open"
-                raise BacktestValidationError(msg)
-            if has_pending:
-                msg = "Entry rejected while an intent is already pending"
-                raise BacktestValidationError(msg)
-            return intent
-        if isinstance(intent, ExitIntent):
-            intent.validate()
-            if intent.decision_open_time != decision_open_time:
-                msg = "Exit intent decision_open_time must match the decision candle"
-                raise BacktestValidationError(msg)
-            if not has_position:
-                msg = "Exit rejected while flat"
-                raise BacktestValidationError(msg)
-            return intent
+        try:
+            if isinstance(intent, EnterIntent):
+                intent.validate_for_policy(self._policy)
+                if intent.decision_open_time != decision_open_time:
+                    msg = "Enter intent decision_open_time must match the decision candle"
+                    raise BacktestValidationError(msg)
+                if has_position:
+                    msg = "Entry rejected while a position is open"
+                    raise BacktestValidationError(msg)
+                if has_pending:
+                    msg = "Entry rejected while an intent is already pending"
+                    raise BacktestValidationError(msg)
+                return intent
+            if isinstance(intent, ExitIntent):
+                intent.validate()
+                if intent.decision_open_time != decision_open_time:
+                    msg = "Exit intent decision_open_time must match the decision candle"
+                    raise BacktestValidationError(msg)
+                if not has_position:
+                    msg = "Exit rejected while flat"
+                    raise BacktestValidationError(msg)
+                return intent
+        except BacktestValidationError:
+            raise
+        except (AttributeError, TypeError) as exc:
+            msg = "Invalid intent object from decision provider"
+            raise BacktestValidationError(msg) from exc
         msg = "Unknown intent type"
         raise BacktestValidationError(msg)
 
@@ -362,6 +397,7 @@ class BacktestEngine:
             if is_buy
             else normalize_sell_fill(slipped, self._policy.tick_size)
         )
+        fill_price = require_positive_price(fill_price, field="entry_fill_price")
         intent.validate_brackets_against_fill(fill_price)
         notional = abs(fill_price * intent.quantity)
         if notional < self._policy.minimum_notional:
@@ -374,6 +410,8 @@ class BacktestEngine:
         else:
             stop = normalize_short_stop(intent.stop_loss, self._policy.tick_size)
             target = normalize_short_target(intent.take_profit, self._policy.tick_size)
+        stop = require_positive_price(stop, field="stop_loss")
+        target = require_positive_price(target, field="take_profit")
         # Re-check brackets after protective tick normalization.
         if intent.direction is PositionDirection.LONG:
             if not (stop < fill_price < target):
@@ -444,6 +482,7 @@ class BacktestEngine:
             if is_buy
             else normalize_sell_fill(slipped, self._policy.tick_size)
         )
+        fill_price = require_positive_price(fill_price, field="exit_fill_price")
         fee = compute_fee(fill_price, snap.quantity, self._policy.taker_fee_bps)
         notional = abs(fill_price * snap.quantity)
         if snap.direction is PositionDirection.LONG:

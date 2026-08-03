@@ -44,8 +44,9 @@ class BacktestPolicy:
             raise BacktestValidationError(msg)
 
         slip = require_finite_decimal(self.market_slippage_bps, field="market_slippage_bps")
-        if slip < 0:
-            msg = "market_slippage_bps must be non-negative"
+        # Fail-closed sell-side safety: 0 <= slippage_bps < 10000 (never wipe price to <= 0).
+        if slip < 0 or slip >= Decimal("10000"):
+            msg = "market_slippage_bps must satisfy 0 <= value < 10000"
             raise BacktestValidationError(msg)
 
         tick = require_finite_decimal(self.tick_size, field="tick_size")
