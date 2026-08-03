@@ -6,10 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from zorqen_research.application.market_data.client import DEFAULT_KLINES_PAGE_LIMIT
 from zorqen_research.application.market_data.ranges import ImportRange
 from zorqen_research.domain.candles import Candle
 from zorqen_research.domain.timeframes import timeframe_duration
-from zorqen_research.infrastructure.binance.client import PAGE_LIMIT
 from zorqen_research.infrastructure.binance.errors import BinanceResponseError
 
 
@@ -36,7 +36,7 @@ def fetch_klines_range(
     client_fetch: FetchPage,
     symbol: str,
     import_range: ImportRange,
-    page_limit: int = PAGE_LIMIT,
+    page_limit: int = DEFAULT_KLINES_PAGE_LIMIT,
 ) -> FetchResult:
     """
     Deterministically paginate forward across [start, end).

@@ -98,7 +98,7 @@ docker compose --profile fixture run --rm --no-deps dataset-fixture
 
 ### Binance public candle import (Milestone 0.4)
 
-Imports historical **closed** USDⓈ-M Futures klines from the public REST host `https://fapi.binance.com` (`GET /fapi/v1/klines`). No Binance account, API key, API secret, signed request, or private endpoint is supported.
+Imports historical **closed** USDⓈ-M Futures klines from the public REST host `https://fapi.binance.com` (`GET /fapi/v1/klines`). No Binance account, API key, API secret, signed request, or private endpoint is supported. The production origin is fixed in code (not configurable); tests inject an HTTP transport against that origin.
 
 Supported symbols: `BTCUSDT`, `ETHUSDT`, `BNBUSDT`.
 

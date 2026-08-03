@@ -7,11 +7,13 @@ from typing import Protocol
 
 from zorqen_research.domain.candles import Candle
 from zorqen_research.domain.timeframes import Timeframe
-from zorqen_research.infrastructure.binance.client import PAGE_LIMIT
+
+# Owned by the application layer (not imported from infrastructure).
+DEFAULT_KLINES_PAGE_LIMIT = 1000
 
 
 class MarketDataClient(Protocol):
-    """Public market-data client (no authentication)."""
+    """Public market-data client contract (no authentication)."""
 
     def fetch_klines_page(
         self,
@@ -20,6 +22,6 @@ class MarketDataClient(Protocol):
         interval: Timeframe,
         start_time: datetime,
         end_time: datetime,
-        limit: int = PAGE_LIMIT,
+        limit: int,
     ) -> tuple[list[Candle], bytes]:
         """Return parsed candles and the exact successful response bytes."""

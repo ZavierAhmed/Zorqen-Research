@@ -16,16 +16,13 @@ from tests.helpers import lifespan_client
 from tests.helpers_binance import make_kline_page, page_bytes
 from zorqen_research.api.app import create_app
 from zorqen_research.application.datasets.service import DatasetDuplicateError
+from zorqen_research.application.market_data.client import DEFAULT_KLINES_PAGE_LIMIT
 from zorqen_research.application.market_data.import_service import BinanceImportService
 from zorqen_research.application.market_data.serialization import serialize_candles_csv
 from zorqen_research.core.config import Settings, clear_settings_cache
 from zorqen_research.domain.timeframes import Timeframe
 from zorqen_research.infrastructure.artifacts.local import LocalFilesystemArtifactStore
-from zorqen_research.infrastructure.binance.client import (
-    PAGE_LIMIT,
-    PRODUCTION_HOST,
-    BinanceFuturesPublicClient,
-)
+from zorqen_research.infrastructure.binance.client import BinanceFuturesPublicClient
 from zorqen_research.infrastructure.binance.errors import BinanceResponseError
 from zorqen_research.infrastructure.binance.schemas import parse_kline_page
 from zorqen_research.infrastructure.database.engine import check_database_ready
@@ -130,7 +127,7 @@ def _mock_client_for_range(
     start: datetime,
     candle_count: int,
     *,
-    page_limit: int = PAGE_LIMIT,
+    page_limit: int = DEFAULT_KLINES_PAGE_LIMIT,
     mutate_after: int | None = None,
 ) -> tuple[BinanceFuturesPublicClient, list[httpx.Request]]:
     rows = make_kline_page(start, candle_count, Timeframe.H1)
@@ -159,7 +156,6 @@ def _mock_client_for_range(
         return httpx.Response(200, content=page_bytes(chunk))
 
     client = BinanceFuturesPublicClient(
-        base_url=PRODUCTION_HOST,
         transport=httpx.MockTransport(handler),
         sleeper=lambda _: None,
         max_attempts=2,
@@ -173,7 +169,7 @@ async def test_multipage_import_publish_api_and_idempotency(
     integration_settings: Settings,
 ) -> None:
     start = datetime(2026, 6, 1, tzinfo=UTC)
-    # > 1000 candles forces multi-page with default PAGE_LIMIT.
+    # > 1000 candles forces multi-page with default page limit.
     candle_count = 1005
     end = start + timedelta(hours=candle_count)
     # Clock must be after the exclusive end so all candles are fully closed.
@@ -309,7 +305,6 @@ async def test_source_drift_rejects_and_gap_rejects(
         return httpx.Response(200, content=page_bytes(rows))
 
     drift_client = BinanceFuturesPublicClient(
-        base_url=PRODUCTION_HOST,
         transport=httpx.MockTransport(drift_handler),
         sleeper=lambda _: None,
     )
@@ -331,7 +326,6 @@ async def test_source_drift_rejects_and_gap_rejects(
         return httpx.Response(200, content=page_bytes(rows))
 
     gap_client = BinanceFuturesPublicClient(
-        base_url=PRODUCTION_HOST,
         transport=httpx.MockTransport(gap_handler),
         sleeper=lambda _: None,
     )

@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zorqen_research.application.audit.service import AuditEventService
 from zorqen_research.application.datasets.manifest import build_and_hash_manifest
 from zorqen_research.application.datasets.service import DatasetDuplicateError
+from zorqen_research.application.market_data.client import (
+    DEFAULT_KLINES_PAGE_LIMIT,
+    MarketDataClient,
+)
 from zorqen_research.application.market_data.pagination import (
     assert_complete_coverage,
     fetch_klines_range,
@@ -29,14 +33,12 @@ from zorqen_research.domain.markets import Market
 from zorqen_research.domain.symbols import Symbol, parse_symbol
 from zorqen_research.domain.timeframes import Timeframe, parse_timeframe
 from zorqen_research.infrastructure.artifacts.local import LocalFilesystemArtifactStore
-from zorqen_research.infrastructure.binance.client import (
-    KLINES_PATH,
-    PAGE_LIMIT,
-    BinanceFuturesPublicClient,
-)
 from zorqen_research.infrastructure.database.repositories.datasets import DatasetRepository
 
 MANIFEST_VERSION_IMPORT = "2"
+# Application-owned Binance provenance (not imported from the HTTP client).
+BINANCE_PROVIDER = "binance"
+BINANCE_KLINES_ENDPOINT_PATH = "/fapi/v1/klines"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,9 +80,10 @@ class BinanceImportService:
         self,
         session: AsyncSession,
         artifact_store: LocalFilesystemArtifactStore,
-        client: BinanceFuturesPublicClient,
+        client: MarketDataClient,
         *,
         max_candles: int = 100_000,
+        page_limit: int = DEFAULT_KLINES_PAGE_LIMIT,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._session = session
@@ -89,6 +92,7 @@ class BinanceImportService:
         self._artifacts = artifact_store
         self._client = client
         self._max_candles = max_candles
+        self._page_limit = page_limit
         self._clock = clock or (lambda: datetime.now(UTC))
 
     async def import_klines(
@@ -119,7 +123,7 @@ class BinanceImportService:
             client_fetch=self._client.fetch_klines_page,
             symbol=parsed_symbol.value,
             import_range=import_range,
-            page_limit=PAGE_LIMIT,
+            page_limit=self._page_limit,
         )
         assert_complete_coverage(fetch.candles, import_range)
 
@@ -167,10 +171,10 @@ class BinanceImportService:
         published_at = datetime.now(UTC)
         snapshot_id = uuid4()
         provenance = {
-            "provider": "binance",
+            "provider": BINANCE_PROVIDER,
             "market": Market.BINANCE_FUTURES.value,
             "data_type": "contract_klines",
-            "endpoint_path": KLINES_PATH,
+            "endpoint_path": BINANCE_KLINES_ENDPOINT_PATH,
             "symbol": parsed_symbol.value,
             "timeframe": parsed_tf.value,
             "requested_start": import_range.start.astimezone(UTC)
@@ -297,7 +301,7 @@ class BinanceImportService:
                 entity_type="dataset_snapshot",
                 entity_id=str(snapshot.id),
                 payload={
-                    "provider": "binance",
+                    "provider": BINANCE_PROVIDER,
                     "market": Market.BINANCE_FUTURES.value,
                     "symbol": parsed_symbol.value,
                     "timeframe": parsed_tf.value,

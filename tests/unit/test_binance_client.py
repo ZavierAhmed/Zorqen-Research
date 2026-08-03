@@ -1,7 +1,8 @@
-"""Unit tests for Binance HTTP client retries and auth boundaries."""
+"""Unit tests for Binance HTTP client origin and auth boundaries."""
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -10,26 +11,29 @@ import pytest
 from tests.helpers_binance import make_kline_page, page_bytes
 from zorqen_research.domain.timeframes import Timeframe
 from zorqen_research.infrastructure.binance.client import (
-    PRODUCTION_HOST,
+    PRODUCTION_ORIGIN,
     BinanceFuturesPublicClient,
 )
 from zorqen_research.infrastructure.binance.errors import (
-    BinanceClientError,
     BinanceRateLimitError,
 )
 
 
-def test_client_rejects_unknown_host_without_transport() -> None:
-    with pytest.raises(BinanceClientError, match="allowlisted"):
-        BinanceFuturesPublicClient(base_url="https://evil.example.com")
+def test_client_has_no_public_base_url_parameter() -> None:
+    signature = inspect.signature(BinanceFuturesPublicClient.__init__)
+    assert "base_url" not in signature.parameters
 
 
-def test_client_rejects_unknown_host_even_with_transport() -> None:
-    with pytest.raises(BinanceClientError, match="allowlisted"):
-        BinanceFuturesPublicClient(
-            base_url="https://evil.example.com",
-            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=b"[]")),
-        )
+def test_client_always_uses_exact_production_origin() -> None:
+    client = BinanceFuturesPublicClient(
+        transport=httpx.MockTransport(lambda _r: httpx.Response(200, content=b"[]")),
+        sleeper=lambda _: None,
+    )
+    try:
+        assert client.origin == "https://fapi.binance.com"
+        assert str(client._client.base_url).rstrip("/") == PRODUCTION_ORIGIN  # noqa: SLF001
+    finally:
+        client.close()
 
 
 def test_fetch_page_success_and_no_api_key_header() -> None:
@@ -41,12 +45,14 @@ def test_fetch_page_success_and_no_api_key_header() -> None:
         assert "X-MBX-APIKEY" not in request.headers
         assert "Authorization" not in request.headers
         assert request.url.path == "/fapi/v1/klines"
+        assert request.url.scheme == "https"
+        assert request.url.host == "fapi.binance.com"
+        assert request.url.port is None or request.url.port == 443
         return httpx.Response(200, content=raw)
 
     transport = httpx.MockTransport(handler)
     sleeps: list[float] = []
     client = BinanceFuturesPublicClient(
-        base_url=PRODUCTION_HOST,
         transport=transport,
         sleeper=sleeps.append,
     )
@@ -55,6 +61,7 @@ def test_fetch_page_success_and_no_api_key_header() -> None:
         interval=Timeframe.H1,
         start_time=start,
         end_time=start + timedelta(hours=1),
+        limit=1000,
     )
     assert len(candles) == 1
     assert body == raw
@@ -75,7 +82,6 @@ def test_retry_429_then_success() -> None:
 
     sleeps: list[float] = []
     client = BinanceFuturesPublicClient(
-        base_url=PRODUCTION_HOST,
         transport=httpx.MockTransport(handler),
         sleeper=sleeps.append,
         max_attempts=3,
@@ -85,6 +91,7 @@ def test_retry_429_then_success() -> None:
         interval=Timeframe.H1,
         start_time=start,
         end_time=start + timedelta(hours=1),
+        limit=1000,
     )
     assert len(candles) == 1
     assert sleeps == [0.01]
@@ -96,7 +103,6 @@ def test_418_is_terminal() -> None:
         return httpx.Response(418)
 
     client = BinanceFuturesPublicClient(
-        base_url=PRODUCTION_HOST,
         transport=httpx.MockTransport(handler),
         sleeper=lambda _: None,
         max_attempts=3,
@@ -107,6 +113,15 @@ def test_418_is_terminal() -> None:
             interval=Timeframe.H1,
             start_time=datetime(2026, 6, 1, tzinfo=UTC),
             end_time=datetime(2026, 6, 1, 1, tzinfo=UTC),
+            limit=1000,
         )
     assert exc.value.terminal is True
     client.close()
+
+
+def test_no_binance_local_wildcard_in_client_module() -> None:
+    import zorqen_research.infrastructure.binance.client as client_mod
+
+    assert not hasattr(client_mod, "ALLOWED_HOSTS")
+    assert ".binance.local" not in inspect.getsource(client_mod)
+    assert "MarketDataClient" not in client_mod.__dict__

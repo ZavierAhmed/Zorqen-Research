@@ -1,10 +1,8 @@
 """Binance infrastructure package."""
 
 from zorqen_research.infrastructure.binance.client import (
-    ALLOWED_HOSTS,
     KLINES_PATH,
-    PAGE_LIMIT,
-    PRODUCTION_HOST,
+    PRODUCTION_ORIGIN,
     BinanceFuturesPublicClient,
 )
 from zorqen_research.infrastructure.binance.errors import (
@@ -13,11 +11,13 @@ from zorqen_research.infrastructure.binance.errors import (
     BinanceResponseError,
 )
 
+# Backward-compatible alias used by older docs/tests; value is the fixed origin.
+PRODUCTION_HOST = PRODUCTION_ORIGIN
+
 __all__ = [
-    "ALLOWED_HOSTS",
     "KLINES_PATH",
-    "PAGE_LIMIT",
     "PRODUCTION_HOST",
+    "PRODUCTION_ORIGIN",
     "BinanceClientError",
     "BinanceFuturesPublicClient",
     "BinanceRateLimitError",

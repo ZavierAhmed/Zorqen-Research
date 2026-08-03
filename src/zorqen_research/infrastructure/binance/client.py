@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Protocol
-from urllib.parse import urlparse
 
 import httpx
 
@@ -21,25 +19,11 @@ from zorqen_research.infrastructure.binance.schemas import parse_kline_page
 
 logger = logging.getLogger(__name__)
 
-PRODUCTION_HOST = "https://fapi.binance.com"
+# Fixed production origin. Not configurable via settings or constructor.
+PRODUCTION_ORIGIN = "https://fapi.binance.com"
 KLINES_PATH = "/fapi/v1/klines"
-PAGE_LIMIT = 1000
-ALLOWED_HOSTS = frozenset({"fapi.binance.com"})
-
-
-class MarketDataClient(Protocol):
-    """Application-facing public market-data client."""
-
-    def fetch_klines_page(
-        self,
-        *,
-        symbol: str,
-        interval: Timeframe,
-        start_time: datetime,
-        end_time: datetime,
-        limit: int = PAGE_LIMIT,
-    ) -> tuple[list[Candle], bytes]:
-        """Return (parsed candles, raw response bytes)."""
+# Infrastructure-local page-size default for this HTTP client implementation.
+_DEFAULT_PAGE_LIMIT = 1000
 
 
 def _to_ms(value: datetime) -> int:
@@ -52,29 +36,27 @@ class BinanceFuturesPublicClient:
     def __init__(
         self,
         *,
-        base_url: str = PRODUCTION_HOST,
         timeout_seconds: float = 30.0,
         max_attempts: int = 4,
         max_retry_delay_seconds: float = 30.0,
         transport: httpx.BaseTransport | None = None,
         sleeper: Callable[[float], None] | None = None,
     ) -> None:
-        parsed = urlparse(base_url)
-        host = (parsed.hostname or "").lower()
-        if host not in ALLOWED_HOSTS and not host.endswith(".binance.local"):
-            msg = "Binance base URL host is not allowlisted"
-            raise BinanceClientError(msg)
-        self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
         self._max_attempts = max(1, max_attempts)
         self._max_retry_delay = max_retry_delay_seconds
         self._sleeper = sleeper or (lambda seconds: __import__("time").sleep(seconds))
         self._client = httpx.Client(
-            base_url=self._base_url,
+            base_url=PRODUCTION_ORIGIN,
             timeout=timeout_seconds,
             transport=transport,
             headers={"Accept": "application/json", "User-Agent": "zorqen-research/0.4"},
         )
+
+    @property
+    def origin(self) -> str:
+        """Return the fixed production HTTPS origin."""
+        return PRODUCTION_ORIGIN
 
     def close(self) -> None:
         self._client.close()
@@ -92,7 +74,7 @@ class BinanceFuturesPublicClient:
         interval: Timeframe,
         start_time: datetime,
         end_time: datetime,
-        limit: int = PAGE_LIMIT,
+        limit: int = _DEFAULT_PAGE_LIMIT,
     ) -> tuple[list[Candle], bytes]:
         params = {
             "symbol": symbol,

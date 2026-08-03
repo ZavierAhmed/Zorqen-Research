@@ -143,3 +143,23 @@ def test_exact_guardrail_boundary() -> None:
     start = datetime(2026, 6, 1, tzinfo=UTC)
     end = start + timedelta(hours=100)
     assert estimate_candle_count(start, end, Timeframe.H1) == 100
+
+
+@pytest.mark.parametrize(
+    "index",
+    [1, 2, 3, 4, 5, 7, 9, 10],  # OHLC, volumes, quote, taker volumes
+)
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity"])
+def test_nonfinite_row_fields_raise_response_error(index: int, bad: str) -> None:
+    from decimal import InvalidOperation
+
+    start = datetime(2026, 6, 1, tzinfo=UTC)
+    row = make_kline_row(start, Timeframe.H1)
+    row[index] = bad
+    try:
+        parse_kline_row(row, timeframe=Timeframe.H1)
+    except BinanceResponseError:
+        return
+    except InvalidOperation as exc:  # pragma: no cover - must not happen
+        pytest.fail(f"InvalidOperation escaped parser boundary: {exc}")
+    pytest.fail("Expected BinanceResponseError for non-finite field")
