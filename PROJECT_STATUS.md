@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.4): `dffd667c26216ebf1878e55e6abe72dde70b45c1`
-- Milestone 0.4A base commit: `dffd667c26216ebf1878e55e6abe72dde70b45c1`
+- Previous verified commit (Milestone 0.4A): `d541658d0ce51e9411576e106f726443aa70f7eb`
+- Milestone 0.4B base commit: `d541658d0ce51e9411576e106f726443aa70f7eb`
 - Milestone result commit: current HEAD containing this status update.
 - Exact SHA: report after commit.
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
@@ -20,7 +20,7 @@
 
 ## 2. Product Purpose
 
-Unchanged from Milestone 0.4. Public market-data import only; no account/trading APIs.
+Unchanged. Public market-data import only; no account/trading APIs.
 
 ## 3. Initial Strategy Scope
 
@@ -28,23 +28,21 @@ Unchanged. Registry metadata only; executable baselines not defined.
 
 ## 4. Current Milestone
 
-- Milestone: `0.4A` — Enforce Binance Client Boundaries and Canonical Candle Invariants
+- Milestone: `0.4B` — Enforce Trade-Count and Artifact-Root Wiring Invariants
 - Status: Complete pending independent review
-- Base: `dffd667c26216ebf1878e55e6abe72dde70b45c1`
+- Base: `d541658d0ce51e9411576e106f726443aa70f7eb`
 - Corrective defects closed:
-  - Application owns `MarketDataClient`; import service no longer types against the concrete HTTPX client
-  - Production origin fixed to exact `https://fapi.binance.com` (no public `base_url`, no `.binance.local`)
-  - Canonical candles reject non-UTC offsets and non-finite Decimals; parser sanitizes non-finite rows
+  - `Candle.trade_count` accepts only real non-negative integers (rejects `bool` / float / Decimal / str)
+  - Settings expose `artifact_root_configured` (`expanduser` only); store construction no longer resolves before symlink validation
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
 ## 5. Latest Verified State
 
-- Application protocol + `DEFAULT_KLINES_PAGE_LIMIT` owned in `application/market_data`
-- Infrastructure `BinanceFuturesPublicClient` has no duplicate protocol and always uses `PRODUCTION_ORIGIN`
-- Candle UTC policy: naive and non-zero-offset timestamps rejected; `close_time >= open_time`
-- Finite-decimal policy: `parse_decimal` + `Candle` reject NaN / ±Infinity
-- Fixture and mocked import hashes unchanged from Milestone 0.4
+- Canonical trade_count invariant enforced in domain; Binance parser keeps sanitized `BinanceResponseError`
+- CLI, dataset API routes, and tests pass `settings.artifact_root_configured` into `LocalFilesystemArtifactStore`
+- Settings/store wiring tests cover symlink identity preservation and settings→store rejection
+- Fixture and mocked import hashes unchanged
 
 Fixture manifest hash:
 `5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`
@@ -55,46 +53,42 @@ Mocked 1005-candle import:
 
 ## 6–8. Product / Architecture / Research Engine
 
-Corrective only. No candle-query API, resampling, indicators, strategies, backtesting, campaigns, candidates, scoring, worker leasing, autonomous research, MOMO, or trading.
+Corrective only. No candle-query API, resampling, strategies, backtesting, campaigns, candidates, scoring, MOMO, or trading.
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 0.4A.
+Awaiting independent review of Milestone 0.4B.
 No later milestone is authorized.
 
-## 10. Verification Evidence (Milestone 0.4A)
+## 10. Verification Evidence (Milestone 0.4B)
 
 Commands actually executed:
 
 ```text
-uv sync --frozen --all-extras   # via uv run / prior lock
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy src
-uv run pytest tests/unit -q                                          # 160 passed
+uv run pytest tests/unit -q                                          # 177 passed
 uv run pytest tests/integration/test_artifact_filesystem.py -q       # 9 passed
 uv run pytest tests/integration -q -m integration                    # 29 passed
 alembic upgrade/downgrade round-trip through 0002 and base           # OK
-uv run zorqen-dataset publish-fixture                                # created=true, same fixture hash
-uv run zorqen-dataset publish-fixture                                # created=false, same hash
+uv run zorqen-dataset publish-fixture                                # same fixture hash
+uv run zorqen-dataset publish-fixture                                # idempotent
 uv run python -m zorqen_research.worker --check                      # OK
 frontend npm ci / lint / test / build                                # 15 tests
-docker compose --profile fixture --profile binance-import build ...
-docker compose up -d postgres migrate api worker frontend
-docker compose --profile fixture run --rm --no-deps -T dataset-fixture
-docker compose --profile binance-import run --rm -T binance-import --help
-curl.exe nginx health/live, health/ready, strategy-families, datasets
-docker compose logs ...; docker compose down -v
+docker compose build (fixture + binance-import profiles)
+docker compose up + fixture run + binance-import --help
+curl.exe nginx health/live, ready, strategy-families, datasets
+docker compose down -v
 ```
 
-Live Binance smoke: not rerun (client still targets the same fixed production origin; transport injection tests cover the constructor change).
-
+Live Binance: not rerun (no network behavior change).
 GitHub Actions: unknown until push.
 
 ## 11. Known Defects and Limitations
 
-Unchanged from Milestone 0.4 (no candle-row query, no Parquet, no websockets).
+Unchanged from Milestone 0.4A.
 
 ## 12. Next Authorized Work
 
-None until Milestone 0.4A is independently accepted.
+None until Milestone 0.4B is independently accepted.

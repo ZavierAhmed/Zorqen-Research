@@ -70,9 +70,15 @@ class Settings(BaseSettings):
         raise ValueError(msg)
 
     @property
-    def artifact_root_resolved(self) -> Path:
-        """Return the artifact root as an absolute path without drive hardcoding."""
-        return self.artifact_root.expanduser().resolve()
+    def artifact_root_configured(self) -> Path:
+        """
+        Return the configured artifact root with ``~`` expanded.
+
+        Does not call ``resolve()``. Symlink identity is preserved so
+        ``LocalFilesystemArtifactStore`` can reject a configured root that is
+        itself a symlink.
+        """
+        return self.artifact_root.expanduser()
 
 
 @lru_cache

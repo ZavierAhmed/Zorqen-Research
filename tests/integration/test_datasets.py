@@ -281,7 +281,7 @@ async def test_fixture_publication_api_and_idempotency(
     alembic_env: dict[str, str],
 ) -> None:
     _alembic(alembic_env, "upgrade", "head")
-    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_configured)
     engine = create_async_engine(integration_settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
@@ -437,7 +437,7 @@ async def test_publication_rollback_leaves_no_partial_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _alembic(alembic_env, "upgrade", "head")
-    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_configured)
     engine = create_async_engine(integration_settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
@@ -504,7 +504,7 @@ async def test_conflicting_duplicate_fixture_raises(
     alembic_env: dict[str, str],
 ) -> None:
     _alembic(alembic_env, "upgrade", "head")
-    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_configured)
     engine = create_async_engine(integration_settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:

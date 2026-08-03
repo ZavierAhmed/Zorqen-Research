@@ -1,8 +1,8 @@
 # ADR 0003 — Artifacts and dataset manifests
 
-- Status: Accepted (amended by Milestone 0.3A)
+- Status: Accepted (Milestone 0.3); amended by Milestones 0.3A, 0.3B, and 0.4B
 - Date: 2026-08-03
-- Milestone: 0.3 / 0.3A
+- Milestone: 0.3 / 0.3A / 0.3B / 0.4B
 
 ## Context
 
@@ -56,11 +56,16 @@ metadata with no-clobber semantics (recovery).
 
 ### Symlink containment
 
-The configured artifact root itself must not be a symlink; the store expands the
-user path and rejects symlink roots before resolving. The `objects`, `meta`,
-and `tmp` directories must also be real directories (not symlinks) remaining under
-the resolved artifact root. Nested path components and final object/metadata
-paths that are symlinks are rejected.
+Settings expose `artifact_root_configured` as the configured path with `~`
+expanded only. Settings must not call `resolve()` before store construction, so
+a configured root that is itself a symlink retains its identity.
+
+The artifact store remains responsible for detecting whether the configured root
+is a symlink, creating the root, resolving the accepted real root, and validating
+`objects`, `meta`, `tmp`, and nested paths. The `objects`, `meta`, and `tmp`
+directories must be real directories (not symlinks) remaining under the resolved
+artifact root. Nested path components and final object/metadata paths that are
+symlinks are rejected.
 
 ### Orphan objects after database rollback
 

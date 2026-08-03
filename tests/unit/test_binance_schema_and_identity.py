@@ -49,8 +49,24 @@ def test_negative_volume_and_trade_count() -> None:
         parse_kline_row(row, timeframe=Timeframe.H1)
     row = make_kline_row(start, Timeframe.H1)
     row[8] = -1
-    with pytest.raises((BinanceResponseError, ValueError)):
+    with pytest.raises(BinanceResponseError):
         parse_kline_row(row, timeframe=Timeframe.H1)
+
+
+@pytest.mark.parametrize("bad", [True, False, 1.5, "1", None])
+def test_invalid_trade_count_row_raises_response_error(bad: object) -> None:
+    from decimal import InvalidOperation
+
+    start = datetime(2026, 6, 1, tzinfo=UTC)
+    row = make_kline_row(start, Timeframe.H1)
+    row[8] = bad
+    try:
+        parse_kline_row(row, timeframe=Timeframe.H1)
+    except BinanceResponseError:
+        return
+    except (TypeError, InvalidOperation, ValueError) as exc:  # pragma: no cover
+        pytest.fail(f"Raw {type(exc).__name__} escaped parser boundary: {exc}")
+    pytest.fail("Expected BinanceResponseError for invalid trade_count")
 
 
 def test_invalid_ohlc_row() -> None:

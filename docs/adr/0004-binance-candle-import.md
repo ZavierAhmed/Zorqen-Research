@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Milestone 0.4); corrected by Milestone 0.4A
+Accepted (Milestone 0.4); corrected by Milestones 0.4A and 0.4B
 
 ## Context
 
@@ -23,6 +23,7 @@ Zorqen Research needs a controlled path to acquire real historical market data f
 11. **Manifest version 2 for imports.** Binance imports publish manifest version `2` with stable provenance. The existing local fixture retains manifest version `1` and its frozen content hash.
 12. **Canonical candle UTC policy.** Naive timestamps and non-zero UTC offsets are rejected at the domain boundary. Infrastructure converters must produce zero-offset UTC before constructing `Candle`.
 13. **Finite decimals only.** `parse_decimal` and `Candle` reject NaN / ±Infinity. Non-finite Binance fields surface as sanitized `BinanceResponseError`.
+14. **Trade count is a non-negative integer.** Canonical `Candle.trade_count` rejects booleans and non-integer types. The Binance parser converts invalid trade-count fields into sanitized `BinanceResponseError`.
 
 ## Consequences
 

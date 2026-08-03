@@ -174,7 +174,7 @@ async def test_multipage_import_publish_api_and_idempotency(
     end = start + timedelta(hours=candle_count)
     # Clock must be after the exclusive end so all candles are fully closed.
     clock = lambda: datetime(2026, 12, 1, tzinfo=UTC)  # noqa: E731
-    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_configured)
     client, requests = _mock_client_for_range(start, candle_count)
     service = BinanceImportService(
         migrated_session,
@@ -284,7 +284,7 @@ async def test_source_drift_rejects_and_gap_rejects(
     start = datetime(2026, 6, 1, tzinfo=UTC)
     end = start + timedelta(hours=3)
     clock = lambda: datetime(2026, 7, 1, tzinfo=UTC)  # noqa: E731
-    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_configured)
 
     client, _ = _mock_client_for_range(start, 3)
     service = BinanceImportService(
@@ -357,7 +357,7 @@ async def test_malformed_later_page_and_audit_rollback(
     candle_count = 1005
     end = start + timedelta(hours=candle_count)
     clock = lambda: datetime(2026, 12, 1, tzinfo=UTC)  # noqa: E731
-    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_configured)
     client, _ = _mock_client_for_range(start, candle_count, mutate_after=1000)
     service = BinanceImportService(
         migrated_session, store, client, max_candles=100_000, clock=clock
@@ -409,7 +409,7 @@ async def test_import_max_candles_guardrail(
 ) -> None:
     start = datetime(2026, 6, 1, tzinfo=UTC)
     end = start + timedelta(hours=10)
-    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(integration_settings.artifact_root_configured)
     client, _ = _mock_client_for_range(start, 10)
     service = BinanceImportService(
         migrated_session,

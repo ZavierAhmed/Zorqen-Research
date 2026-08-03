@@ -47,6 +47,9 @@ class Candle:
         if self.close_time < self.open_time:
             msg = "close_time must be greater than or equal to open_time"
             raise ValueError(msg)
+        if isinstance(self.trade_count, bool) or not isinstance(self.trade_count, int):
+            msg = "trade_count must be an integer"
+            raise TypeError(msg)
         if self.trade_count < 0:
             msg = "trade_count must be non-negative"
             raise ValueError(msg)

@@ -105,3 +105,20 @@ def test_parse_decimal_rejects_nonfinite(bad: object) -> None:
 def test_parse_decimal_preserves_finite_values() -> None:
     assert parse_decimal("1.50", field="open") == Decimal("1.50")
     assert parse_decimal(3, field="volume") == Decimal(3)
+
+
+@pytest.mark.parametrize("bad", [False, True, 1.5, Decimal("1"), "1"])
+def test_trade_count_rejects_non_integers(bad: object) -> None:
+    with pytest.raises(TypeError, match="trade_count must be an integer"):
+        Candle(**_valid_kwargs(trade_count=bad))  # type: ignore[arg-type]
+
+
+def test_trade_count_rejects_negative_integer() -> None:
+    with pytest.raises(ValueError, match="non-negative"):
+        Candle(**_valid_kwargs(trade_count=-1))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("good", [0, 1, 42])
+def test_trade_count_accepts_non_negative_integers(good: int) -> None:
+    candle = Candle(**_valid_kwargs(trade_count=good))  # type: ignore[arg-type]
+    assert candle.trade_count == good

@@ -34,7 +34,7 @@ def get_dataset_service(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> DatasetService:
     settings: Settings = request.app.state.settings
-    store = LocalFilesystemArtifactStore(settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(settings.artifact_root_configured)
     return DatasetService(session, store)
 
 

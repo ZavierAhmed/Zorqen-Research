@@ -45,7 +45,7 @@ async def _publish_fixture(fixture_path: Path) -> int:
     configure_logging(settings.log_level)
     engine = create_engine(settings.database_url)
     session_factory = get_session_factory(engine)
-    store = LocalFilesystemArtifactStore(settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(settings.artifact_root_configured)
     try:
         async with session_factory() as session:
             service = DatasetService(session, store)
@@ -84,7 +84,7 @@ async def _import_binance(
     configure_logging(settings.log_level)
     engine = create_engine(settings.database_url)
     session_factory = get_session_factory(engine)
-    store = LocalFilesystemArtifactStore(settings.artifact_root_resolved)
+    store = LocalFilesystemArtifactStore(settings.artifact_root_configured)
     client = BinanceFuturesPublicClient(
         timeout_seconds=settings.binance_request_timeout_seconds,
         max_attempts=settings.binance_max_attempts,
