@@ -15,6 +15,8 @@ SRC = REPO_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+# Ensure model tables are attached to metadata for Alembic.
+import zorqen_research.infrastructure.database.models  # noqa: E402, F401
 from zorqen_research.core.config import get_settings  # noqa: E402
 from zorqen_research.infrastructure.database.metadata import metadata  # noqa: E402
 

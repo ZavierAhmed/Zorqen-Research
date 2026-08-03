@@ -21,6 +21,9 @@ COPY alembic.ini ./
 
 RUN uv sync --frozen --no-dev
 
+FROM base AS migrate
+CMD ["uv", "run", "alembic", "upgrade", "head"]
+
 FROM base AS api
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "zorqen_research.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

@@ -8,15 +8,15 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.1): `34b85afcb7de96894a181a09b7a2705c9df93067`
-- Milestone 0.1A base commit: `34b85afcb7de96894a181a09b7a2705c9df93067`
+- Previous verified commit (Milestone 0.1A): `7fe8ee02c629df67ed9ec91c6a7c72455b925c1f`
+- Milestone 0.2 base commit: `7fe8ee02c629df67ed9ec91c6a7c72455b925c1f`
 - Milestone result commit: current HEAD containing this status update.
 - Exact SHA: report after commit and record as the previous verified commit during the next status update.
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
 - Current environment: Windows development laptop
 - Target deployment: Windows or Linux VPS
 - Runtime principle: CPU-first; no mandatory GPU dependency
-- Push state at handoff writing: local `main` tracked `origin/main` (confirm with `git status -sb` after commit; this corrective commit is not pushed unless explicitly instructed)
+- Push state: confirm with `git status -sb` after commit (do not push unless instructed)
 
 ## 2. Product Purpose
 
@@ -28,121 +28,109 @@ It does not connect to exchanges, place paper/live trades, approve live deployme
 
 ### Primary
 
-- Adaptive Multi-Timeframe Trend Breakout
+- Adaptive Multi-Timeframe Trend Breakout (`adaptive_mtf_trend_breakout`)
+  - Stable UUID: `a1b2c3d4-e5f6-4789-a012-3456789abc01`
 
 ### Secondary
 
-- Support and Resistance
+- Support and Resistance (`support_resistance`)
+  - Stable UUID: `a1b2c3d4-e5f6-4789-a012-3456789abc02`
 
-Baseline behavior for both strategies must come from an authoritative implementation or explicitly approved formal definition before autonomous modification begins.
-
-**Milestones 0.1 / 0.1A do not implement either strategy.**
+Registry metadata exists. Executable baseline behavior is not defined in Zorqen Research yet.
 
 ## 4. Current Milestone
 
-- Milestone: `0.1A` — Correct Frontend-to-API Routing and Close Deployment Verification Gap
+- Milestone: `0.2` — Core Persistence, Audit Trail, and Strategy Family Registry
 - Status: Complete pending independent review
-- Objective: Same-origin relative `/api` default for Vite and Docker/nginx; remove baked `http://127.0.0.1:8000` from production bundles; document env-file ownership; exercise real fetch URL tests; run full-stack Docker smoke
+- Objective: Shared SQLAlchemy foundation, strategy-family registry + seeds, append-only audit events, read-only APIs, Docker migrate service, full verification
 - Implementation started: Yes
-- Repository commit created: Yes (this corrective milestone commit)
+- Repository commit created: Yes (this milestone commit)
 
-## 5. Defect Corrected
+## 5. Latest Verified State
 
-Milestone 0.1 frontend Dockerfile defaulted `VITE_API_BASE_URL=http://127.0.0.1:8000`, baking an absolute API origin into the static JS. Compose also exposed a runtime frontend `environment:` that cannot alter a compiled Vite bundle. Absolute browser calls to `:8000` are cross-origin; the API has no CORS. Required model is same-origin `/api` via Vite proxy (dev) or nginx → `api:8000` (Compose).
+- Domain/application layers for strategy families and audit append
+- Tables: `strategy_families`, `audit_events` via Alembic `0002_core_registry_and_audit`
+- APIs: `GET /api/v1/strategy-families`, `GET /api/v1/strategy-families/{code}` (read-only)
+- Docker: dedicated `migrate` service; API/worker wait for successful migration
+- CI: quality, integration, docker-routing-smoke (extended with registry assertion)
+- Frontend status page unchanged; routing regression still passing
+- Tests: backend unit 25 + integration 9; frontend 15
 
-## 6. Latest Verified State
+## 6. Frozen Product Decisions
 
-- Backend: unchanged health endpoints and worker foundation
-- Frontend: `resolveApiBaseUrl` / `buildHealthUrl` / `fetchSystemStatus` default to relative `/api/...`
-- Docker frontend image: `ARG VITE_API_BASE_URL=` (empty); no Compose build-arg by default
-- nginx: `/api/` → `http://api:8000/api/` with forwarding headers
-- Env model: root `.env.example` = backend/Compose; `frontend/.env.example` = Vite vars
-- Tests: backend 17; frontend 15 (11 fetch/URL + 4 UI)
-- CI: quality, integration, and new `docker-routing-smoke.yml`
-- Docker full-stack smoke: passed through `http://127.0.0.1:5173/api/...`; production bundle contained no `127.0.0.1:8000`
+Unchanged. Research authority only; no paper/live trading; separate from MOMO Quant.
 
-### Files changed in 0.1A
+## 7. Architecture Direction
 
-- `frontend/src/api/status.ts`
-- `frontend/src/api/status.test.ts` (new)
-- `frontend/Dockerfile`
-- `frontend/nginx.conf`
-- `frontend/.env.example` (new)
-- `frontend/.gitignore`
-- `docker-compose.yml`
-- `.env.example`
-- `README.md`
-- `.github/workflows/docker-routing-smoke.yml` (new)
-- `PROJECT_STATUS.md`
+See `docs/adr/0001-foundation-stack.md` and `docs/adr/0002-core-registry-and-audit.md`.
 
-## 7. Frozen Product Decisions
-
-Unchanged from Milestone 0.1. Research authority only; no paper/live trading; separate from MOMO Quant.
-
-## 8. Architecture Direction
-
-Unchanged modular monolith. Routing decision: same-origin relative `/api` is the default; absolute `VITE_API_BASE_URL` is an intentional non-default override only.
-
-## 9. Research Engine Status
+## 8. Research Engine Status
 
 - Campaign model: Not implemented
-- Strategy DSL: Not implemented
+- Strategy DSL / executable definitions: Not implemented
 - Data snapshots: Not implemented
 - Backtest engine: Not implemented
 - Validation: Not implemented
 - Qualification policy: Not implemented
 - Candidate packages: Not implemented
 - MOMO Quant integration: Not implemented
+- Strategy-family metadata registry: Implemented (Milestone 0.2)
+- Audit-event append foundation: Implemented (no HTTP endpoint)
 
-## 10. Outstanding Work
+## 9. Outstanding Work
 
-1. Independent review of Milestone 0.1A
+1. Independent review of Milestone 0.2
 2. Authorize the next milestone from repository evidence
 3. Formalize authoritative baselines for both strategies in later milestones
 
-## 11. Known Risks / Limitations
+## 10. Known Risks / Limitations
 
-- Early Compose startup can briefly return nginx 502 until the API process accepts connections; smoke waits until readiness succeeds.
-- Postgres Alpine may log locale/`trust` auth warnings in local Compose; not treated as routing failures.
-- GitHub Actions `docker-routing-smoke` was added but not executed on GitHub in this session.
-- Worker/job leasing and research features remain deferred.
+- Database-level UPDATE/DELETE prevention for audit events is deferred; application-layer append-only is enforced and tested.
+- Brief nginx 502s can occur while the API is still starting.
+- GitHub Actions workflows were updated locally but not executed on GitHub in this session.
+- No authentication yet.
 
-## 12. Next Authorized Work
+## 11. Next Authorized Work
 
-Awaiting independent review. **Milestone 0.2 is not authorized.**
+Awaiting independent review. **No later milestone is authorized.**
 
-Do not implement strategy logic, backtesting, autonomous research, candidate scoring, MOMO Quant integration, or paper/live trading.
+Do not implement strategy logic, backtesting, campaigns, candidates, scoring, MOMO Quant integration, or paper/live trading.
 
-## 13. Coding-Agent Handoff
+## 12. Coding-Agent Handoff
 
-### Commands actually run for Milestone 0.1A
+### Commands actually run for Milestone 0.2
 
 ```text
-git rev-parse HEAD (start) -> 34b85afcb7de96894a181a09b7a2705c9df93067
-uv sync --frozen --all-extras
-uv run ruff check . / ruff format --check . / mypy src -> pass
-uv run pytest tests/unit -q -> 13 passed
-uv run pytest tests/integration -q -m integration -> 4 passed
-uv run alembic upgrade head / downgrade base / upgrade head -> pass
+git rev-parse HEAD (start) -> 7fe8ee02c629df67ed9ec91c6a7c72455b925c1f
+uv run ruff check . / ruff format --check . -> pass
+uv run mypy src -> Success: no issues found in 34 source files
+uv run pytest tests/unit -q -> 25 passed
+uv run alembic upgrade head
+uv run alembic downgrade 0001_baseline
+uv run alembic upgrade head
+uv run alembic downgrade base
+uv run alembic upgrade head -> all succeeded
+uv run pytest tests/integration -q -m integration -> 9 passed
 uv run python -m zorqen_research.worker --check -> exit 0
-frontend: npm ci; npm run lint; npm run test -- --run -> 15 passed
-frontend: npm run build -> pass
+frontend npm ci / lint / test --run / build -> 15 passed; build ok
 docker compose config --quiet -> pass
 docker compose down -v
-docker compose build api worker frontend
-docker compose up -d postgres api worker frontend
-curl http://127.0.0.1:5173/ -> 200
+docker compose build api worker frontend migrate
+docker compose up -d postgres migrate api worker frontend
+  migrate exited successfully after 0001+0002 upgrades
 curl http://127.0.0.1:5173/api/v1/health/live -> healthy
 curl http://127.0.0.1:5173/api/v1/health/ready -> ready / database healthy
-production bundle grep for 127.0.0.1:8000 -> none
-docker compose logs inspected (brief nginx 502 during API warm-up only)
+curl http://127.0.0.1:5173/api/v1/strategy-families
+  -> count=2; primary then secondary; both active; stable UUIDs
+docker compose logs inspected (migrate upgrade, API 200s via nginx)
 docker compose down -v
 ```
 
-## 14. Change Log
+## 13. Change Log
 
 | Date | Milestone | Commit | Summary | Verification |
 |---|---|---|---|---|
 | 2026-08-03 | Planning | `5276613` | Product direction and master specification v0.1 | Document-level only |
-| 2026-08-03 | 0.1 | `34b85af` | Bootstrap executable repository foundation | 17 backend + 4 frontend tests; Alembic; worker check; partial Docker |
-| 2026-08-03 | 0.1A | (this commit) | Correct frontend API routing and Docker verification | 17 backend + 15 frontend tests; full Compose smoke via nginx `/api` |
+| 2026-08-03 | 0.1 | `34b85af` | Bootstrap executable repository foundation | 17 backend + 4 frontend |
+| 2026-08-03 | 0.1A | `7fe8ee0` | Correct frontend API routing and Docker verification | 17 backend + 15 frontend; nginx smoke |
+| 2026-08-03 | 0.2 | (this commit) | Core registry and audit persistence | 25 unit + 9 integration + 15 frontend; migrate+registry smoke |

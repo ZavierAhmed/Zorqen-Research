@@ -17,6 +17,23 @@ services:
       retries: 10
       start_period: 5s
 
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    container_name: zorqen-research-migrate
+    environment:
+      ZORQEN_ENVIRONMENT: development
+      ZORQEN_LOG_LEVEL: INFO
+      ZORQEN_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_DATABASE_URL_SYNC: postgresql+psycopg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_ARTIFACT_ROOT: /app/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -39,6 +56,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   worker:
     build:
@@ -58,6 +77,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   frontend:
     build:

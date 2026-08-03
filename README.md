@@ -17,9 +17,15 @@ Trading execution belongs to MOMO Quant. This repository is research and qualifi
 
 ## Current milestone scope
 
-Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing for Vite development and Docker/nginx.
+Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** adds:
 
-**Not implemented yet:** strategy generation, backtesting, candidate scoring, autonomous research loops, or MOMO Quant integration.
+- Strategy-family metadata registry (two approved families, no executable definitions)
+- Append-only application audit-event foundation
+- Read-only strategy-family APIs
+- Alembic migration `0002_core_registry_and_audit` with stable seed UUIDs
+- Dedicated Docker Compose `migrate` service
+
+**Still not implemented:** strategy logic/DSL, indicators, parameters, market-data import, backtesting, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -34,12 +40,14 @@ Modular monolith with separate processes:
 
 ```text
 src/zorqen_research/
-  api/             FastAPI app and health routes
+  api/             FastAPI routes and response schemas
+  application/     Strategy-family and audit services
+  domain/          Framework-independent values
   core/            Settings and logging
-  infrastructure/  Database engine and metadata
+  infrastructure/  Database engine, models, repositories
   worker/          Worker entry point and idle service
 frontend/          React + Vite + TypeScript UI
-alembic/           Migrations (empty baseline in 0.1)
+alembic/           Migrations (baseline + core registry/audit)
 tests/unit|integration
 docs/specification Master specification PDF
 docs/adr           Architecture decision records
@@ -97,7 +105,8 @@ Copy-Item frontend\.env.example frontend\.env
 - `ZORQEN_WORKER_IDLE_INTERVAL_SECONDS`
 - `ZORQEN_ARTIFACT_ROOT`
 - Optional Compose ports and Postgres credentials
-- Optional Compose **build-time** `VITE_API_BASE_URL` (leave unset/empty)
+
+Root `.env` does **not** automatically forward `VITE_API_BASE_URL` into the frontend image. An absolute frontend API base requires an explicit Docker build argument or an explicit Compose `build.args` entry. Ordinary local and Docker use leave the frontend base empty (same-origin `/api`).
 
 ### `frontend/.env` (Vite only)
 
@@ -160,6 +169,50 @@ docker compose ps
 
 Default development credentials in `.env.example` are local placeholders (`zorqen` / `zorqen`), not production secrets.
 
+## Strategy-family metadata API
+
+Read-only endpoints (metadata only — no strategy logic):
+
+```http
+GET /api/v1/strategy-families
+GET /api/v1/strategy-families/{code}
+```
+
+Seeded families:
+
+| Priority | Code | Display name |
+|---|---|---|
+| primary | `adaptive_mtf_trend_breakout` | Adaptive Multi-Timeframe Trend Breakout |
+| secondary | `support_resistance` | Support and Resistance |
+
+Executable baselines are not defined in Zorqen Research yet.
+
+## Audit-event foundation
+
+`audit_events` stores append-only application events (JSONB payload, correlation and entity indexes). Application code can append events; there is no HTTP audit API and no application update/delete path in this milestone. Ordinary read requests are not audited.
+
+## Migrations
+
+Direct (local PostgreSQL):
+
+```powershell
+uv run alembic upgrade head
+uv run alembic downgrade 0001_baseline
+uv run alembic upgrade head
+uv run alembic downgrade base
+uv run alembic upgrade head
+```
+
+Compose migration service (runs before API/worker):
+
+```powershell
+docker compose up -d postgres migrate
+# or full stack:
+docker compose up -d postgres migrate api worker frontend
+```
+
+The `migrate` service uses the backend image target `migrate`, runs `alembic upgrade head`, and exits. API and worker wait for `service_completed_successfully`.
+
 ## Test commands
 
 ### Backend
@@ -186,6 +239,8 @@ npm run build
 
 ```powershell
 uv run alembic upgrade head
+uv run alembic downgrade 0001_baseline
+uv run alembic upgrade head
 uv run alembic downgrade base
 uv run alembic upgrade head
 ```
@@ -193,16 +248,16 @@ uv run alembic upgrade head
 ## Docker commands
 
 ```powershell
-docker compose config
+docker compose config --quiet
 docker compose build api worker frontend
-docker compose up -d postgres api worker frontend
+docker compose up -d postgres migrate api worker frontend
 
 # Verify through the frontend/nginx origin (not only port 8000):
-curl.exe -f http://127.0.0.1:5173/
 curl.exe -f http://127.0.0.1:5173/api/v1/health/live
 curl.exe -f http://127.0.0.1:5173/api/v1/health/ready
+curl.exe -f http://127.0.0.1:5173/api/v1/strategy-families
 
-docker compose logs --no-color api worker frontend postgres
+docker compose logs --no-color postgres migrate api worker frontend
 docker compose down -v
 ```
 
@@ -214,6 +269,7 @@ Unit tests do not require Docker. Integration tests and Alembic verification req
 - Agent rules: [AGENTS.md](AGENTS.md)
 - Verified project status: [PROJECT_STATUS.md](PROJECT_STATUS.md)
 - Foundation ADR: [docs/adr/0001-foundation-stack.md](docs/adr/0001-foundation-stack.md)
+- Registry/audit ADR: [docs/adr/0002-core-registry-and-audit.md](docs/adr/0002-core-registry-and-audit.md)
 
 ## Current non-goals
 

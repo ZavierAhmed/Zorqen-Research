@@ -1,4 +1,4 @@
-# Docker Compose routing smoke: frontend/nginx same-origin /api -> API.
+# Docker Compose routing smoke: frontend/nginx same-origin /api -> API + registry.
 name: Docker Routing Smoke
 
 on:
@@ -20,11 +20,11 @@ jobs:
       - name: Validate Compose file
         run: docker compose config --quiet
 
-      - name: Build API and frontend images
-        run: docker compose build api frontend
+      - name: Build API, migrate, and frontend images
+        run: docker compose build api migrate frontend
 
-      - name: Start postgres, api, and frontend
-        run: docker compose up -d postgres api frontend
+      - name: Start postgres, migrate, api, and frontend
+        run: docker compose up -d postgres migrate api frontend
 
       - name: Wait for frontend origin readiness through nginx
         run: |
@@ -57,9 +57,29 @@ jobs:
           print("nginx -> api liveness ok")
           PY
 
+      - name: Verify strategy-family registry via frontend origin
+        run: |
+          set -euo pipefail
+          curl -sf http://127.0.0.1:5173/api/v1/strategy-families | tee /tmp/families.json
+          python3 - <<'PY'
+          import json
+          payload = json.load(open("/tmp/families.json"))
+          items = payload["items"]
+          assert payload["count"] == 2, payload
+          assert len(items) == 2, payload
+          assert [item["code"] for item in items] == [
+              "adaptive_mtf_trend_breakout",
+              "support_resistance",
+          ], payload
+          assert items[0]["research_priority"] == "primary", payload
+          assert items[1]["research_priority"] == "secondary", payload
+          assert all(item["status"] == "active" for item in items), payload
+          print("nginx -> strategy-families registry ok")
+          PY
+
       - name: Print service logs on failure
         if: failure()
-        run: docker compose logs --no-color api frontend postgres
+        run: docker compose logs --no-color postgres migrate api frontend
 
       - name: Clean up
         if: always()

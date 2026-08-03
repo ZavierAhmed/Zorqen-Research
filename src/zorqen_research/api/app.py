@@ -8,8 +8,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+import zorqen_research.infrastructure.database.models  # noqa: F401
 from zorqen_research import __version__
-from zorqen_research.api.routes import health
+from zorqen_research.api.routes import health, strategy_families
 from zorqen_research.core.config import Settings, get_settings
 from zorqen_research.core.logging import configure_logging
 from zorqen_research.infrastructure.database.engine import (
@@ -56,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health.router)
+    app.include_router(strategy_families.router)
 
     @app.get("/", response_model=RootMetadata, tags=["metadata"])
     async def root() -> RootMetadata:
