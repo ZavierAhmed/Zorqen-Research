@@ -1,0 +1,90 @@
+.status-page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.status-header h1 {
+  margin: 0.2rem 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.lede {
+  margin: 0;
+  color: var(--muted);
+  max-width: 38rem;
+}
+
+.status-panel {
+  margin-top: 2rem;
+  padding: 1.25rem 1.35rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.status-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+
+.status-panel .detail {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.status-panel.state-healthy {
+  border-left: 4px solid var(--ok);
+}
+
+.status-panel.state-loading {
+  border-left: 4px solid var(--line);
+}
+
+.status-panel.state-degraded {
+  border-left: 4px solid var(--warn);
+}
+
+.status-panel.state-unavailable {
+  border-left: 4px solid var(--bad);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 0;
+}
+
+.status-grid dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.status-grid dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.boundary {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 560px) {
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}

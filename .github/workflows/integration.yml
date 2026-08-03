@@ -1,0 +1,87 @@
+# PostgreSQL-backed integration verification for the foundation.
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  postgres-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zorqen
+          POSTGRES_PASSWORD: zorqen
+          POSTGRES_DB: zorqen_research
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U zorqen -d zorqen_research"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ZORQEN_ENVIRONMENT: test
+      ZORQEN_LOG_LEVEL: INFO
+      ZORQEN_DATABASE_URL: postgresql+asyncpg://zorqen:zorqen@127.0.0.1:5432/zorqen_research
+      ZORQEN_DATABASE_URL_SYNC: postgresql+psycopg://zorqen:zorqen@127.0.0.1:5432/zorqen_research
+      ZORQEN_ARTIFACT_ROOT: artifacts
+      ZORQEN_WORKER_IDLE_INTERVAL_SECONDS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.1"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Restore Python dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Alembic upgrade head
+        run: uv run alembic upgrade head
+
+      - name: Alembic downgrade base
+        run: uv run alembic downgrade base
+
+      - name: Alembic upgrade head (again)
+        run: uv run alembic upgrade head
+
+      - name: Backend integration tests
+        run: uv run pytest tests/integration -q -m integration
+
+      - name: API readiness against PostgreSQL
+        run: |
+          uv run uvicorn zorqen_research.api.app:create_app --factory --host 127.0.0.1 --port 8000 &
+          API_PID=$!
+          trap 'kill $API_PID' EXIT
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/api/v1/health/live >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/api/v1/health/ready | tee /tmp/ready.json
+          python - <<'PY'
+          import json
+          payload = json.load(open("/tmp/ready.json"))
+          assert payload["status"] == "ready"
+          assert payload["components"]["database"]["status"] == "healthy"
+          print("readiness ok")
+          PY
+
+      - name: Worker check against PostgreSQL
+        run: uv run python -m zorqen_research.worker --check

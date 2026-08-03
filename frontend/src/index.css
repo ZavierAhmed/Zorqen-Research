@@ -1,0 +1,37 @@
+:root {
+  color-scheme: light;
+  --bg: #f3efe6;
+  --ink: #1c2420;
+  --muted: #5a655e;
+  --line: #cfc6b6;
+  --ok: #1f6b4a;
+  --warn: #8a5a12;
+  --bad: #8b2e2e;
+  --panel: #fffdf8;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, #e7f0e8 0%, transparent 40%),
+    linear-gradient(180deg, #f7f3ea 0%, #ebe4d6 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}

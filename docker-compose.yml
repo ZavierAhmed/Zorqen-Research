@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zorqen-research-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zorqen}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zorqen}
+      POSTGRES_DB: ${POSTGRES_DB:-zorqen_research}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - zorqen_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zorqen} -d ${POSTGRES_DB:-zorqen_research}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: zorqen-research-api
+    environment:
+      ZORQEN_ENVIRONMENT: development
+      ZORQEN_LOG_LEVEL: INFO
+      ZORQEN_API_HOST: 0.0.0.0
+      ZORQEN_API_PORT: 8000
+      ZORQEN_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_DATABASE_URL_SYNC: postgresql+psycopg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_ARTIFACT_ROOT: /app/artifacts
+      ZORQEN_WORKER_IDLE_INTERVAL_SECONDS: "5"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - zorqen_artifacts:/app/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    container_name: zorqen-research-worker
+    environment:
+      ZORQEN_ENVIRONMENT: development
+      ZORQEN_LOG_LEVEL: INFO
+      ZORQEN_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_DATABASE_URL_SYNC: postgresql+psycopg://${POSTGRES_USER:-zorqen}:${POSTGRES_PASSWORD:-zorqen}@postgres:5432/${POSTGRES_DB:-zorqen_research}
+      ZORQEN_ARTIFACT_ROOT: /app/artifacts
+      ZORQEN_WORKER_IDLE_INTERVAL_SECONDS: "5"
+    volumes:
+      - zorqen_artifacts:/app/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: zorqen-research-frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000}
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - api
+
+volumes:
+  zorqen_pgdata:
+  zorqen_artifacts:
