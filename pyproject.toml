@@ -28,6 +28,7 @@ dev = [
 zorqen-api = "zorqen_research.api.app:run"
 zorqen-worker = "zorqen_research.worker.__main__:main"
 zorqen-dataset = "zorqen_research.datasets.cli:main"
+zorqen-backtest = "zorqen_research.backtesting.cli:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -17,15 +17,15 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** / **0.4A** / **0.4B** added public Binance futures candle import with strict candle and artifact-root invariants. Milestone **0.5** adds:
+Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** / **0.4A** / **0.4B** added public Binance futures candle import with strict candle and artifact-root invariants. Milestone **0.5** / **0.5A** added verified candle querying. Milestone **0.6** adds:
 
-- Verified read path for canonical CSV candle partitions
-- Artifact, manifest, and provenance integrity checks before every query
-- Read-only candle query API with `[start, end)` filters and open-time cursor pagination
-- Dataset verification CLI (`zorqen-dataset verify-snapshot`)
-- Explicit support for manifest-v2 Binance imports only; legacy fixture remains query-unsupported
+- Pure deterministic single-symbol bar-based backtest kernel (in-memory only)
+- Market-on-next-open entries/exits with long and short support
+- Stop-loss / take-profit with stop-first same-bar ambiguity policy
+- Exact Decimal fees, adverse slippage, fill/trade ledgers, and result hashing
+- Golden scripted scenarios via `zorqen-backtest run-golden`
 
-**Still not implemented:** resampling, Parquet, indicators, backtesting, strategies, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** indicators, strategy definitions, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -202,6 +202,49 @@ uv run zorqen-dataset verify-snapshot --snapshot-id <uuid>
 Successful verification prints JSON with `ok`, hashes, partition/candle/source counts, and open-time bounds (exit `0`). Unsupported legacy schemas exit nonzero with `unsupported: true` without calling the result corrupted solely for format. Unknown or integrity failures also exit nonzero. Verification performs no mutation and no network access.
 
 Responses never include absolute filesystem paths. Draft/rejected snapshots are not listed. There is no create/upload/update/delete dataset HTTP API, no candle mutation API, no resampling parameter, and no Binance refresh API.
+
+### Deterministic backtest kernel (Milestone 0.6)
+
+The backtest kernel is a pure in-memory simulator with no database, network, FastAPI, or strategy-family dependency. It proves execution semantics before any strategy code exists.
+
+Timing:
+
+- Decisions occur at candle **close**
+- Intents cannot fill on the decision candle (no lookahead)
+- Market entries/exits fill at the **next candle open**
+- Final-bar pending entries remain unfilled
+
+Execution model (supported now):
+
+- One symbol, one timeframe, one open position
+- Long and short
+- Market-on-next-open entry and explicit exit
+- Stop-loss and take-profit
+- Same-bar ambiguity: **stop-first**
+- End-of-data forced close when configured
+- Taker fees + adverse market slippage on every fill (including take-profit)
+- Exact `Decimal` P&L; buy fills round ticks up, sell fills round ticks down
+
+Drawdown:
+
+- Summary reports **maximum realized-equity drawdown** only
+- Mark-to-market / intratrade drawdown is not computed yet
+
+Unsupported (intentionally deferred):
+
+- Limit/maker/partial fills, pyramiding, portfolio mode
+- Funding, leverage, liquidation, order-book simulation
+- Indicators, strategy DSL, optimization, campaigns
+- Backtest HTTP API, persistence, worker jobs, frontend screens
+
+Golden verification (no Compose service required):
+
+```powershell
+uv run zorqen-backtest run-golden --scenario long-target
+uv run zorqen-backtest run-golden --scenario all
+```
+
+Successful runs print JSON with `ok`, equity/P&L/fees, and a stable `result_hash`.
 ## Frontend API routing (same-origin default)
 
 Ordinary local and Docker use must keep the browser on relative `/api/...` URLs. Do not set an absolute API URL for day-to-day development.

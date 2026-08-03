@@ -1,0 +1,74 @@
+"""CLI for deterministic golden backtest verification."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+from zorqen_research.application.backtesting.golden import SCENARIOS, run_scenario
+from zorqen_research.application.market_data.serialization import format_canonical_decimal
+
+
+def _emit(payload: dict[str, object], *, ok: bool) -> int:
+    text = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    if ok:
+        print(text)
+        return 0
+    print(text, file=sys.stderr)
+    return 1
+
+
+def _run_one(name: str) -> tuple[bool, dict[str, object]]:
+    try:
+        result = run_scenario(name)
+    except KeyError:
+        return False, {"ok": False, "scenario": name, "error": "unknown_scenario"}
+    except Exception as exc:  # noqa: BLE001 — CLI boundary
+        return False, {"ok": False, "scenario": name, "error": str(exc)}
+    payload = {
+        "ok": True,
+        "scenario": name,
+        "input_candle_count": result.summary.input_candle_count,
+        "closed_trade_count": result.summary.closed_trade_count,
+        "final_equity": format_canonical_decimal(result.summary.final_equity),
+        "net_pnl": format_canonical_decimal(result.summary.net_pnl),
+        "total_fees": format_canonical_decimal(result.summary.total_fees),
+        "result_hash": result.summary.result_hash,
+    }
+    return True, payload
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="zorqen-backtest",
+        description="Deterministic golden backtest verification (no network/database)",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    run = sub.add_parser("run-golden", help="Run one or all golden scenarios")
+    run.add_argument(
+        "--scenario",
+        required=True,
+        help="Scenario name or 'all'",
+    )
+    args = parser.parse_args(argv)
+    if args.command != "run-golden":
+        parser.error(f"Unknown command: {args.command}")
+        return 2
+
+    if args.scenario == "all":
+        failures = 0
+        for name in sorted(SCENARIOS):
+            ok, payload = _run_one(name)
+            print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+            if not ok:
+                failures += 1
+                print(payload.get("error", "failed"), file=sys.stderr)
+        return 0 if failures == 0 else 1
+
+    ok, payload = _run_one(args.scenario)
+    return _emit(payload, ok=ok)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -26,6 +26,21 @@ def _is_exist_error(exc: OSError) -> bool:
     return isinstance(exc, FileExistsError) or exc.errno == errno.EEXIST
 
 
+def _without_extended_prefix(path: Path) -> Path:
+    """
+    Normalize Windows ``\\\\?\\`` extended paths for containment checks.
+
+    ``Path.resolve()`` may return an extended-length prefix while the configured
+    root does not, which breaks ``relative_to`` without changing actual location.
+    """
+    text = os.fspath(path)
+    if text.startswith("\\\\?\\UNC\\"):
+        return Path("\\\\" + text[8:])
+    if text.startswith("\\\\?\\"):
+        return Path(text[4:])
+    return path
+
+
 class LocalFilesystemArtifactStore:
     """
     SHA-256 content-addressed store rooted at a configured directory.
@@ -316,9 +331,9 @@ class LocalFilesystemArtifactStore:
         if not path.is_dir():
             msg = f"Artifact {label} path is not a directory"
             raise ArtifactStoreError(msg)
-        resolved = path.resolve()
+        resolved = _without_extended_prefix(path.resolve())
         try:
-            resolved.relative_to(self._root)
+            resolved.relative_to(_without_extended_prefix(self._root))
         except ValueError as exc:
             msg = "Artifact path escapes configured root"
             raise ArtifactStoreError(msg) from exc
@@ -341,10 +356,10 @@ class LocalFilesystemArtifactStore:
             if current.exists() and current.is_symlink():
                 msg = "Artifact path escapes configured root"
                 raise ArtifactStoreError(msg)
-        candidate = current.resolve(strict=False)
+        candidate = _without_extended_prefix(current.resolve(strict=False))
         try:
-            candidate.relative_to(base_resolved)
-            candidate.relative_to(self._root)
+            candidate.relative_to(_without_extended_prefix(base_resolved))
+            candidate.relative_to(_without_extended_prefix(self._root))
         except ValueError as exc:
             msg = "Artifact path escapes configured root"
             raise ArtifactStoreError(msg) from exc
