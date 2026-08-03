@@ -28,23 +28,51 @@ export interface SystemStatus {
   detail: string;
 }
 
-function apiBaseUrl(): string {
-  const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  if (configured && configured.trim().length > 0) {
-    return configured.replace(/\/$/, "");
+/**
+ * Resolve the API origin used by the browser.
+ *
+ * Default is an empty string so requests stay same-origin relative
+ * (`/api/...`) and rely on the Vite or nginx proxy.
+ *
+ * Pass `configured` explicitly in tests. In the browser, omit it so the
+ * build-time `VITE_API_BASE_URL` is read (empty/unset => relative /api).
+ */
+export function resolveApiBaseUrl(configured?: string | null): string {
+  const raw =
+    configured !== undefined
+      ? configured
+      : (import.meta.env.VITE_API_BASE_URL as string | undefined);
+  if (raw == null) {
+    return "";
   }
-  // Empty base uses the Vite proxy during local development.
-  return "";
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
+/** Build a health endpoint URL from an optional API base. */
+export function buildHealthUrl(
+  path: "/api/v1/health/live" | "/api/v1/health/ready",
+  base: string = resolveApiBaseUrl(),
+): string {
+  if (!base) {
+    return path;
+  }
+  return `${base}${path}`;
 }
 
 export async function fetchSystemStatus(
   fetchImpl: typeof fetch = fetch,
+  apiBase: string = resolveApiBaseUrl(),
 ): Promise<SystemStatus> {
-  const base = apiBaseUrl();
+  const liveUrl = buildHealthUrl("/api/v1/health/live", apiBase);
+  const readyUrl = buildHealthUrl("/api/v1/health/ready", apiBase);
 
   let liveOk = false;
   try {
-    const liveResponse = await fetchImpl(`${base}/api/v1/health/live`);
+    const liveResponse = await fetchImpl(liveUrl);
     if (!liveResponse.ok) {
       return {
         overall: "unavailable",
@@ -64,7 +92,7 @@ export async function fetchSystemStatus(
   }
 
   try {
-    const readyResponse = await fetchImpl(`${base}/api/v1/health/ready`);
+    const readyResponse = await fetchImpl(readyUrl);
     const payload = (await readyResponse.json()) as ReadinessResponse;
     const dbStatus =
       payload.components?.database?.status === "healthy"

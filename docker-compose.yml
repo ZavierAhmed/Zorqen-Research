@@ -63,9 +63,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Intentionally no VITE_API_BASE_URL build arg.
+      # The Dockerfile default is empty so the bundle uses same-origin /api
+      # (proxied by nginx to the api service). Do not pass a Compose/runtime
+      # environment value expecting it to change a compiled Vite bundle.
+      # Intentional override example:
+      #   docker compose build --build-arg VITE_API_BASE_URL=https://api.example.com frontend
     container_name: zorqen-research-frontend
-    environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000}
     ports:
       - "${FRONTEND_PORT:-5173}:80"
     depends_on:

@@ -15,18 +15,9 @@ Zorqen Research does **not**:
 
 Trading execution belongs to MOMO Quant. This repository is research and qualification only.
 
-## Current milestone scope (0.1)
+## Current milestone scope
 
-Milestone 0.1 establishes the executable repository foundation only:
-
-- Python 3.12 FastAPI backend with liveness/readiness probes
-- Separate Python worker entry point with `--check` mode
-- PostgreSQL connectivity and Alembic migrations (empty baseline)
-- React + Vite + TypeScript system-status frontend
-- Docker Compose development support
-- Backend and frontend automated tests
-- GitHub Actions quality and integration workflows
-- Documentation and architecture decision records
+Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing for Vite development and Docker/nginx.
 
 **Not implemented yet:** strategy generation, backtesting, candidate scoring, autonomous research loops, or MOMO Quant integration.
 
@@ -54,6 +45,31 @@ docs/specification Master specification PDF
 docs/adr           Architecture decision records
 ```
 
+## Frontend API routing (same-origin default)
+
+Ordinary local and Docker use must keep the browser on relative `/api/...` URLs. Do not set an absolute API URL for day-to-day development.
+
+### Local Vite development
+
+1. Browser requests `/api/v1/health/live` (same origin as the Vite app).
+2. Vite proxies `/api` to `VITE_API_PROXY_TARGET` (default `http://127.0.0.1:8000`).
+3. Leave `VITE_API_BASE_URL` empty in `frontend/.env`.
+
+### Docker Compose / nginx
+
+1. Browser requests `/api/v1/health/live` through the frontend origin (port 5173 by default).
+2. nginx proxies `/api/` to `http://api:8000/api/`.
+3. `VITE_API_BASE_URL` is a **build-time** Vite/Docker value. The Compose file does not pass it by default; the Dockerfile ARG defaults to empty so the production bundle uses relative `/api` requests.
+4. A runtime Compose `environment:` value cannot change a compiled Vite bundle. To override intentionally:
+
+```powershell
+docker compose build --build-arg VITE_API_BASE_URL=https://api.example.com frontend
+```
+
+Do not put an absolute `VITE_API_BASE_URL` in the root `.env` for ordinary local or Docker use — that was the Milestone 0.1 routing defect.
+
+Optional absolute `VITE_API_BASE_URL` overrides are supported for special deployments only. They are not the default and are not recommended for local or Compose use. This project does not add permissive CORS to paper over routing mistakes.
+
 ## Prerequisites
 
 - Python 3.12
@@ -65,13 +81,14 @@ docs/adr           Architecture decision records
 
 ## Environment configuration
 
-Copy the example file and adjust values:
+Backend and Compose variables live at the repository root. Frontend Vite variables live under `frontend/`.
 
 ```powershell
 Copy-Item .env.example .env
+Copy-Item frontend\.env.example frontend\.env
 ```
 
-All backend settings use the `ZORQEN_` prefix. See `.env.example` for:
+### Root `.env` (backend / Compose)
 
 - `ZORQEN_ENVIRONMENT`, `ZORQEN_LOG_LEVEL`
 - `ZORQEN_API_HOST`, `ZORQEN_API_PORT`
@@ -79,9 +96,17 @@ All backend settings use the `ZORQEN_` prefix. See `.env.example` for:
 - `ZORQEN_DATABASE_URL_SYNC` (psycopg, for Alembic)
 - `ZORQEN_WORKER_IDLE_INTERVAL_SECONDS`
 - `ZORQEN_ARTIFACT_ROOT`
-- `VITE_API_BASE_URL` (frontend)
+- Optional Compose ports and Postgres credentials
+- Optional Compose **build-time** `VITE_API_BASE_URL` (leave unset/empty)
 
-Do not commit `.env` or real credentials.
+### `frontend/.env` (Vite only)
+
+- `VITE_API_PROXY_TARGET` — proxy destination for `npm run dev` (default `http://127.0.0.1:8000`)
+- `VITE_API_BASE_URL` — leave empty so the browser uses relative `/api/...`
+
+Vite loads env files from `frontend/`, not the repository root. Do not put Vite variables only in the root `.env` and expect the frontend to read them.
+
+Do not commit `.env` files or real credentials.
 
 ## Windows PowerShell setup
 
@@ -89,6 +114,7 @@ Do not commit `.env` or real credentials.
 # From the repository root
 uv sync --all-extras
 Copy-Item .env.example .env
+Copy-Item frontend\.env.example frontend\.env
 
 # Start PostgreSQL (Docker example)
 docker compose up -d postgres
@@ -104,7 +130,7 @@ uv run python -m zorqen_research.worker
 # or one-shot check:
 uv run python -m zorqen_research.worker --check
 
-# Frontend (separate terminal)
+# Frontend (separate terminal) — uses relative /api + Vite proxy
 cd frontend
 npm ci
 npm run dev
@@ -115,6 +141,7 @@ npm run dev
 ```bash
 uv sync --all-extras
 cp .env.example .env
+cp frontend/.env.example frontend/.env
 docker compose up -d postgres
 uv run alembic upgrade head
 uv run uvicorn zorqen_research.api.app:create_app --factory --host 127.0.0.1 --port 8000
@@ -167,8 +194,16 @@ uv run alembic upgrade head
 
 ```powershell
 docker compose config
-docker compose up -d postgres
-docker compose up --build api worker frontend
+docker compose build api worker frontend
+docker compose up -d postgres api worker frontend
+
+# Verify through the frontend/nginx origin (not only port 8000):
+curl.exe -f http://127.0.0.1:5173/
+curl.exe -f http://127.0.0.1:5173/api/v1/health/live
+curl.exe -f http://127.0.0.1:5173/api/v1/health/ready
+
+docker compose logs --no-color api worker frontend postgres
+docker compose down -v
 ```
 
 Unit tests do not require Docker. Integration tests and Alembic verification require a live PostgreSQL instance.
@@ -182,7 +217,7 @@ Unit tests do not require Docker. Integration tests and Alembic verification req
 
 ## Current non-goals
 
-The following are explicitly out of scope for Milestone 0.1 and must not be started until authorized:
+The following are explicitly out of scope and must not be started until authorized:
 
 - Strategy logic (Adaptive MTF Trend Breakout, Support and Resistance)
 - Backtesting and validation engines
