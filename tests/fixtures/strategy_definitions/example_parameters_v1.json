@@ -1,0 +1,8 @@
+{
+  "parameters": {
+    "atr_period": 14,
+    "atr_multiplier": "2.5",
+    "use_confirmation": true,
+    "entry_mode": "strict"
+  }
+}

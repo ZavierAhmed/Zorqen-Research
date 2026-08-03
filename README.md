@@ -17,15 +17,14 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** / **0.4A** / **0.4B** added public Binance futures candle import with strict candle and artifact-root invariants. Milestone **0.5** / **0.5A** added verified candle querying. Milestone **0.6** adds:
+Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** / **0.4A** / **0.4B** added public Binance futures candle import with strict candle and artifact-root invariants. Milestone **0.5** / **0.5A** added verified candle querying. Milestone **0.6** / **0.6A** / **0.6B** added the deterministic backtest kernel with frozen goldens and a sanitized provider boundary. Milestone **0.7** adds:
 
-- Pure deterministic single-symbol bar-based backtest kernel (in-memory only)
-- Market-on-next-open entries/exits with long and short support
-- Stop-loss / take-profit with stop-first same-bar ambiguity policy
-- Exact Decimal fees, adverse slippage, fill/trade ledgers, and result hashing
-- Golden scripted scenarios via `zorqen-backtest run-golden`
+- Immutable strategy-definition and parameter schemas (pure domain models)
+- Exact family ID/code binding to the two seeded families
+- Strict JSON parsing, canonical serialization, and deterministic hashes
+- Local `zorqen-strategy` validation CLI (no network/database/execution)
 
-**Still not implemented:** indicators, strategy definitions, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, indicators, provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -44,6 +43,8 @@ src/zorqen_research/
   application/     Strategy-family, audit, dataset, market-data, and artifact workflows
   domain/          Framework-independent values (including candles)
   datasets/        Fixture + Binance import CLI (`zorqen-dataset`)
+  backtesting/     Golden backtest CLI (`zorqen-backtest`)
+  strategies/      Strategy-definition validation CLI (`zorqen-strategy`)
   core/            Settings and logging
   infrastructure/  Database, local artifact store, Binance public client, repositories
   worker/          Worker entry point and idle service
@@ -245,6 +246,30 @@ uv run zorqen-backtest run-golden --scenario all
 ```
 
 Successful runs print JSON with `ok`, equity/P&L/fees, and a stable `result_hash`.
+
+### Immutable strategy definitions (Milestone 0.7)
+
+Family metadata (`GET /api/v1/strategy-families`) is not an executable strategy. Milestone 0.7 adds a pure schema that future implementations must satisfy:
+
+| Concept | Meaning |
+|---|---|
+| Strategy definition | Immutable schema: family binding, version, timeframes, directions, parameters |
+| Draft | Structurally valid; `source_spec_sha256` may be null; not an approved baseline |
+| Approved | Requires a source-spec SHA-256; **does not** mean executable code exists |
+| Parameter set | Exact values bound to one definition hash |
+| Instance specification | Logical pairing of definition + parameter set + deterministic hashes |
+
+Parameter kinds: `decimal`, `integer`, `boolean`, `enum`. Decimal values in JSON are **canonical strings** (e.g. `"2.5"`), never JSON numbers. Hashes are SHA-256 over compact sorted-key JSON. There is no dynamic import, module path, class name, or strategy algorithm in definitions.
+
+CLI (no network/database/execution):
+
+```powershell
+uv run zorqen-strategy validate-definition --file tests/fixtures/strategy_definitions/example_definition_v1.json
+uv run zorqen-strategy bind-parameters --definition tests/fixtures/strategy_definitions/example_definition_v1.json --parameters tests/fixtures/strategy_definitions/example_parameters_v1.json
+```
+
+Test fixtures under `tests/fixtures/strategy_definitions/` are draft-only and are **not** the Adaptive MTF or Support/Resistance production baselines.
+
 ## Frontend API routing (same-origin default)
 
 Ordinary local and Docker use must keep the browser on relative `/api/...` URLs. Do not set an absolute API URL for day-to-day development.

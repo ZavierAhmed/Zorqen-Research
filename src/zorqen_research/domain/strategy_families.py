@@ -13,6 +13,33 @@ SUPPORT_RESISTANCE_ID = UUID("a1b2c3d4-e5f6-4789-a012-3456789abc02")
 ADAPTIVE_MTF_TREND_BREAKOUT_CODE = "adaptive_mtf_trend_breakout"
 SUPPORT_RESISTANCE_CODE = "support_resistance"
 
+# Exact seeded (family_id → family_code) pairs. No third family.
+SEEDED_FAMILY_PAIRS: dict[UUID, str] = {
+    ADAPTIVE_MTF_TREND_BREAKOUT_ID: ADAPTIVE_MTF_TREND_BREAKOUT_CODE,
+    SUPPORT_RESISTANCE_ID: SUPPORT_RESISTANCE_CODE,
+}
+
+
+def require_seeded_family_pair(*, family_id: UUID, family_code: str) -> None:
+    """
+    Require ``family_id`` and ``family_code`` to be one exact seeded pair.
+
+    Raises ``ValueError`` when either side is unknown or the pair does not match.
+    """
+    expected = SEEDED_FAMILY_PAIRS.get(family_id)
+    if expected is None:
+        msg = f"Unknown strategy family_id: {family_id}"
+        raise ValueError(msg)
+    if family_code not in SEEDED_FAMILY_PAIRS.values():
+        msg = f"Unknown strategy family_code: {family_code!r}"
+        raise ValueError(msg)
+    if expected != family_code:
+        msg = (
+            f"Strategy family_id/code mismatch: id={family_id} "
+            f"expects code={expected!r}, got {family_code!r}"
+        )
+        raise ValueError(msg)
+
 
 class ResearchPriority(StrEnum):
     """Allowed research_priority values for strategy families."""
