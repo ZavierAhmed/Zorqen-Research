@@ -58,12 +58,24 @@ Milestone 1.1. Mandatory `NOT TESTED` count: **0**.
 | No NumPy/pandas/TA libraries | package imports | VERIFIED BY SOURCE INSPECTION | VERIFIED BY SOURCE INSPECTION |
 | No migration / API / frontend / persistence work | no new alembic/routes/UI | VERIFIED BY SOURCE INSPECTION; migrations remain `0001`–`0003` in verification evidence | VERIFIED BY SOURCE INSPECTION |
 | Milestone 1.2 MTF composition not implemented | no MTF indicator wiring | `test_mtf_types_have_no_indicator_fields` | PROVEN BY AUTOMATED TEST |
+| Indicator input is exact and reverified | `bundles.py` `_reverify_indicator_input` | `test_provenance_input_subclass_rejected_before_override`, `test_provenance_input_subclass_isinstance_not_enough`, `test_provenance_valid_input_accepted` | PROVEN BY AUTOMATED TEST |
+| Stored input fields cannot be forged | `_reverify_indicator_input` reconstructs from candles | `test_provenance_forged_input_false_count_hash_rejected` | PROVEN BY AUTOMATED TEST |
+| Indicator hash alone is not treated as semantic proof | calculator recalculation before retention | `test_provenance_forged_ema_false_values_matching_hash_fails`, `test_provenance_forged_negative_atr_matching_hash_fails` | PROVEN BY AUTOMATED TEST |
+| Every series is recalculated from candles | `recalculate_indicator_series` | `test_provenance_forged_ema_false_values_matching_hash_fails`, `test_provenance_forged_true_range_false_values_matching_hash_fails` | PROVEN BY AUTOMATED TEST |
+| Forged EMA with matching hash fails | bundle semantic verify | `test_provenance_forged_ema_false_values_matching_hash_fails`, `test_provenance_forged_ema_false_warmup_matching_hash_fails` | PROVEN BY AUTOMATED TEST |
+| Forged ATR with matching hash fails | bundle semantic verify | `test_provenance_forged_negative_atr_matching_hash_fails` | PROVEN BY AUTOMATED TEST |
+| First-defined and defined-count metadata are reverified | field compare vs calculator | `test_provenance_forged_metadata_fields_matching_hash_fail` | PROVEN BY AUTOMATED TEST |
+| Bundle hash is recomputed before feed use | `IndicatorDecisionFeed.from_bundle` rebuild | `test_provenance_forged_bundle_fields_rejected_by_feed`, `test_provenance_valid_bundle_feed_deterministic_and_retains_trusted` | PROVEN BY AUTOMATED TEST |
+| Complete forged bundle fails | feed identity match | `test_provenance_forged_bundle_fields_rejected_by_feed`, `test_provenance_forged_bundle_key_series_mismatch_rejected`, `test_provenance_forged_bundle_with_semantic_series_rejected` | PROVEN BY AUTOMATED TEST |
+| Feed retains a rebuilt trusted bundle | `from_bundle` stores `trusted` | `test_provenance_valid_bundle_feed_deterministic_and_retains_trusted`, `test_provenance_byte_identical_forged_replaced_by_trusted` | PROVEN BY AUTOMATED TEST |
 
 ## Totals
 
 | Evidence class | Count |
 | -------------- | ----- |
-| PROVEN BY AUTOMATED TEST | 52 |
+| PROVEN BY AUTOMATED TEST | 63 |
 | VERIFIED BY SOURCE INSPECTION | 5 |
 | NOT TESTED | **0** |
 | NOT APPLICABLE | 0 |
+
+Milestone 1.1A adds calculator-owned semantic series verification and feed-boundary bundle reverification on top of Milestone 1.1.

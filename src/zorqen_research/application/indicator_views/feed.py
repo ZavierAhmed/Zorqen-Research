@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from zorqen_research.application.indicator_views.prefix_hashes import compute_prefix_hash_chain
-from zorqen_research.domain.indicator_views.bundles import IndicatorSeriesBundle
+from zorqen_research.domain.indicator_views.bundles import (
+    IndicatorSeriesBundle,
+    require_bundle_identity_match,
+)
 from zorqen_research.domain.indicator_views.errors import IndicatorViewValidationError
 from zorqen_research.domain.indicator_views.histories import _VerifiedIndicatorSource
 from zorqen_research.domain.indicator_views.keys import IndicatorSeriesKey
@@ -41,19 +44,31 @@ class IndicatorDecisionFeed:
             raise IndicatorViewValidationError(msg)
         try:
             _ = (
+                bundle.indicator_input,
                 bundle.series,
                 bundle.series_keys,
                 bundle.symbol,
                 bundle.timeframe,
                 bundle.input_candle_count,
+                bundle.input_candle_hash,
+                bundle.input_hash,
+                bundle.series_count,
                 bundle.bundle_hash,
+                bundle.schema_version,
             )
         except AttributeError as exc:
             msg = "bundle must be an exact IndicatorSeriesBundle"
             raise IndicatorViewValidationError(msg) from exc
 
+        # Rebuild through the accepted factory; never trust submitted metadata alone.
+        trusted = IndicatorSeriesBundle.from_verified(
+            indicator_input=bundle.indicator_input,
+            series=bundle.series,
+        )
+        require_bundle_identity_match(submitted=bundle, trusted=trusted)
+
         sources: list[_VerifiedIndicatorSource] = []
-        for series, series_key in zip(bundle.series, bundle.series_keys, strict=True):
+        for series, series_key in zip(trusted.series, trusted.series_keys, strict=True):
             rebuilt = IndicatorSeriesKey.from_series_parameters(
                 indicator_code=series.indicator_code,
                 parameters=series.parameters,
@@ -68,8 +83,8 @@ class IndicatorDecisionFeed:
                 msg = "bundle series key parameters identity mismatch"
                 raise IndicatorViewValidationError(msg)
             prefix_hashes = compute_prefix_hash_chain(
-                symbol=bundle.symbol,
-                timeframe=bundle.timeframe,
+                symbol=trusted.symbol,
+                timeframe=trusted.timeframe,
                 series_key=series_key,
                 math_policy=series.math_policy,
                 values=series.values,
@@ -85,7 +100,7 @@ class IndicatorDecisionFeed:
             )
 
         self = object.__new__(cls)
-        object.__setattr__(self, "bundle", bundle)
+        object.__setattr__(self, "bundle", trusted)
         object.__setattr__(self, "_sources", tuple(sources))
         return self
 

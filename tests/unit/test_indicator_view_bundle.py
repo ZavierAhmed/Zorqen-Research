@@ -95,7 +95,7 @@ def test_series_from_another_symbol_rejected() -> None:
         timeframe=TIMEFRAME,
         candles=indicator_input_from_specs(specs).candles,
     )
-    with pytest.raises(IndicatorViewValidationError, match="symbol"):
+    with pytest.raises(IndicatorViewValidationError, match="symbol|byte-identical"):
         IndicatorSeriesBundle.from_verified(
             indicator_input=left,
             series=(ema_close(right, 3),),
@@ -116,7 +116,7 @@ def test_series_from_another_timeframe_rejected() -> None:
         timeframe=Timeframe.M5,
         candles=candle_series(specs, timeframe=Timeframe.M5),
     )
-    with pytest.raises(IndicatorViewValidationError, match="timeframe"):
+    with pytest.raises(IndicatorViewValidationError, match="timeframe|byte-identical"):
         IndicatorSeriesBundle.from_verified(
             indicator_input=left,
             series=(ema_close(right, 3),),
@@ -134,7 +134,7 @@ def test_series_from_another_candle_tuple_rejected() -> None:
             ("99", "100", "98", "99"),
         )
     )
-    with pytest.raises(IndicatorViewValidationError, match="candle hash"):
+    with pytest.raises(IndicatorViewValidationError, match="candle hash|byte-identical"):
         IndicatorSeriesBundle.from_verified(
             indicator_input=left,
             series=(ema_close(right, 3),),
@@ -144,7 +144,10 @@ def test_series_from_another_candle_tuple_rejected() -> None:
 def test_candle_count_mismatch_rejected() -> None:
     left = indicator_input_from_specs(_specs())
     right = indicator_input_from_specs(_specs()[:3])
-    with pytest.raises(IndicatorViewValidationError, match="candle count|candle hash"):
+    with pytest.raises(
+        IndicatorViewValidationError,
+        match="candle count|candle hash|byte-identical",
+    ):
         IndicatorSeriesBundle.from_verified(
             indicator_input=left,
             series=(ema_close(right, 2),),
@@ -155,7 +158,7 @@ def test_result_hash_mismatch_rejected() -> None:
     indicator_input = indicator_input_from_specs(_specs())
     series = ema_close(indicator_input, 3)
     object.__setattr__(series, "result_hash", "0" * 64)
-    with pytest.raises(IndicatorViewValidationError, match="result hash"):
+    with pytest.raises(IndicatorViewValidationError, match="result_hash|result hash"):
         IndicatorSeriesBundle.from_verified(
             indicator_input=indicator_input,
             series=(series,),

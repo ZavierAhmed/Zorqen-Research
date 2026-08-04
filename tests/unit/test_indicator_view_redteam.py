@@ -84,7 +84,7 @@ def test_redteam_mutated_hash_duplicate_bool_period_string_alias() -> None:
     )
     series = ema_close(indicator_input, 2)
     object.__setattr__(series, "result_hash", "ab" * 32)
-    with pytest.raises(IndicatorViewValidationError, match="result hash"):
+    with pytest.raises(IndicatorViewValidationError, match="result_hash|result hash"):
         IndicatorSeriesBundle.from_verified(
             indicator_input=indicator_input,
             series=(series,),
