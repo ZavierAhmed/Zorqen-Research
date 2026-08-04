@@ -1,9 +1,10 @@
 # 0009 — Multi-Timeframe Backtest Decision Feed Traceability
 
-Milestone: **0.9 / 0.9A / 0.9B — Deterministic Multi-Timeframe Backtest Decision Feed**  
+Milestone: **0.9 / 0.9A / 0.9B / 0.9C — Deterministic Multi-Timeframe Backtest Decision Feed**  
 Base commit (0.9): `3ac02582af357cf91a3080149abf470d2f60222c`  
 Corrective base (0.9A): `b8080301a5f70d8a3ed42203479a4927778eb826`  
-Corrective base (0.9B): `28de6a0c22b8572a05f5a627b1c9b541632eec6a`
+Corrective base (0.9B): `28de6a0c22b8572a05f5a627b1c9b541632eec6a`  
+Corrective base (0.9C): `c5dd8baaaefaf945b62ab08da56a41ff237e26c3`
 
 Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` · `NOT TESTED` · `NOT APPLICABLE`
 
@@ -37,7 +38,12 @@ Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` 
 | Context view history is bound to its `ContextSeriesInput` | `_from_feed` identity check | `test_view_content_bound_to_exact_feed_sources` | PROVEN BY AUTOMATED TEST |
 | Execution history is bound to the input bundle | `_from_feed` identity check | `test_view_content_bound_to_exact_feed_sources` | PROVEN BY AUTOMATED TEST |
 | Performance proof uses no public source-exposure API | private `_source` inspection | `test_visible_history_constant_time_construction` | PROVEN BY AUTOMATED TEST |
-| Frozen MTF goldens A–E + no-lookahead probe | `goldens.py` + CLI | `zorqen-backtest run-mtf-golden`, `test_no_lookahead_probe_golden_preserves_exact_close_hashes` | PROVEN BY AUTOMATED TEST |
+| History repr does not reveal the backing source | `VisibleCandleHistory.__repr__` / `repr=False` | `test_history_repr_str_seal_and_formatting_paths` | PROVEN BY AUTOMATED TEST |
+| History str does not reveal the backing source | `VisibleCandleHistory.__str__` | `test_history_repr_str_seal_and_formatting_paths` | PROVEN BY AUTOMATED TEST |
+| Nested decision-view repr does not reveal future candles | safe history repr nested in views | `test_nested_view_and_context_repr_seal` | PROVEN BY AUTOMATED TEST |
+| Enhanced provider-context repr does not reveal future candles | `MultiTimeframeBacktestDecisionContext` | `test_nested_view_and_context_repr_seal`, no-lookahead probe | PROVEN BY AUTOMATED TEST |
+| Representation is constant-time and source-access-free | instrumented source during repr/str | `test_history_repr_str_are_constant_time_and_source_access_free` | PROVEN BY AUTOMATED TEST |
+| Frozen MTF goldens A–E + no-lookahead probe | `goldens.py` + CLI | `zorqen-backtest run-mtf-golden`, `test_provider_repr_probe_preserves_exact_close_hashes` | PROVEN BY AUTOMATED TEST |
 | Existing seven result hashes unchanged | `BacktestEngine` untouched | `zorqen-backtest run-golden` | PROVEN BY AUTOMATED TEST |
 | Existing alignment/resample hashes unchanged | no 0.8A contract change | `zorqen-timeframes verify-golden` | PROVEN BY AUTOMATED TEST |
 | No strategy algorithms / persistence / API | package layout | Source inspection | VERIFIED BY SOURCE INSPECTION |
@@ -64,5 +70,6 @@ Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` 
 | Mutable list input | ValidationError | Failed | bundle tests | Tuple requirement |
 | Context candle change | Bundle/envelope change | Passed | golden E / envelope sensitivity | Hash binding |
 | O(n) prefix copy per bar | Constant-time view construction | Passed | instrumented history test | Internal source + end_exclusive |
+| Dataclass history repr/str | Future candles via representation | Blocked | 0.9C repr tests + probe | Safe `repr=False` + explicit metadata |
 
 No remaining mandatory untested bypasses after the red-team loop.

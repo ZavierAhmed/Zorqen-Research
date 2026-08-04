@@ -9,7 +9,7 @@ from zorqen_research.domain.candles import Candle
 from zorqen_research.domain.strategy_backtesting.errors import StrategyBacktestValidationError
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True, init=False, repr=False)
 class _VerifiedHistorySource:
     """
     Internal immutable candle source validated once at the bundle/feed boundary.
@@ -44,8 +44,15 @@ class _VerifiedHistorySource:
     def __len__(self) -> int:
         return len(self._candles)
 
+    def __repr__(self) -> str:
+        # Do not expose candle contents or full-series length.
+        return "_VerifiedHistorySource()"
 
-@dataclass(frozen=True, slots=True, init=False)
+    def __str__(self) -> str:
+        return self.__repr__()
+
+
+@dataclass(frozen=True, slots=True, init=False, repr=False)
 class VisibleCandleHistory:
     """
     Read-only view over ``source[0:end_exclusive]`` without exposing the full tuple.
@@ -140,3 +147,10 @@ class VisibleCandleHistory:
         if self._end_exclusive == 0:
             return None
         return self._source[self._end_exclusive - 1]
+
+    def __repr__(self) -> str:
+        # O(1): only the visible end-exclusive count — never traverse the source.
+        return f"VisibleCandleHistory(visible_count={self._end_exclusive})"
+
+    def __str__(self) -> str:
+        return self.__repr__()

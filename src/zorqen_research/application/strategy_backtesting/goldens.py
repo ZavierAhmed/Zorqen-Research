@@ -123,6 +123,47 @@ _FORBIDDEN_HISTORY_ATTRS = (
 )
 
 
+def _future_timestamp_sentinels(
+    full_series: tuple[Candle, ...],
+    *,
+    visible_count: int,
+) -> tuple[str, ...]:
+    """Unique future open/close timestamps — safe against hash digit collisions."""
+    sentinels: list[str] = []
+    for candle in full_series[visible_count:]:
+        sentinels.append(candle.open_time.isoformat())
+        sentinels.append(candle.close_time.isoformat())
+    return tuple(sentinels)
+
+
+def _future_value_sentinels(
+    full_series: tuple[Candle, ...],
+    *,
+    visible_count: int,
+) -> tuple[str, ...]:
+    """Distinctive future OHLC/volume strings for history-only representations."""
+    sentinels: list[str] = []
+    for candle in full_series[visible_count:]:
+        sentinels.extend(
+            (
+                format(candle.open, "f"),
+                format(candle.high, "f"),
+                format(candle.low, "f"),
+                format(candle.close, "f"),
+                format(candle.volume, "f"),
+                format(candle.quote_asset_volume, "f"),
+            )
+        )
+    return tuple(sentinels)
+
+
+def _assert_text_excludes(text: str, sentinels: tuple[str, ...], *, label: str) -> None:
+    for sentinel in sentinels:
+        if sentinel and sentinel in text:
+            msg = f"{label} leaked future-candle sentinel: {sentinel}"
+            raise StrategyBacktestValidationError(msg)
+
+
 class NoLookaheadProbeProvider:
     """
     Test-only provider that actively probes public future-access paths.
@@ -170,6 +211,10 @@ class NoLookaheadProbeProvider:
                 full_series=series,
                 visible_count=item.visible_count,
             )
+        self._probe_representation_leakage(
+            context,
+            execution_visible=execution_visible,
+        )
         if not self._emitted_first:
             if execution_visible != self._expected_execution_visible:
                 msg = "execution visible count mismatch at first ready bar"
@@ -182,6 +227,64 @@ class NoLookaheadProbeProvider:
             self._emitted_first = True
             return self._first_ready
         return ()
+
+    def _probe_representation_leakage(
+        self,
+        context: MultiTimeframeBacktestDecisionContext,
+        *,
+        execution_visible: int,
+    ) -> None:
+        view = context.view
+        exec_ts = _future_timestamp_sentinels(
+            self._full_execution,
+            visible_count=execution_visible,
+        )
+        exec_vals = _future_value_sentinels(
+            self._full_execution,
+            visible_count=execution_visible,
+        )
+        history_texts = (
+            repr(view.execution_history),
+            str(view.execution_history),
+            f"{view.execution_history!r}",
+            "%r" % (view.execution_history,),  # noqa: UP031 — intentional percent-format path
+        )
+        for text in history_texts:
+            _assert_text_excludes(text, exec_ts, label="execution history representation")
+            _assert_text_excludes(text, exec_vals, label="execution history representation")
+            if "Candle(" in text or "_source=" in text:
+                self.public_source_exposed = True
+                msg = "execution history representation exposed candle/source content"
+                raise StrategyBacktestValidationError(msg)
+
+        all_future_ts: list[str] = list(exec_ts)
+        for item, series in zip(view.contexts, self._full_contexts, strict=True):
+            ctx_ts = _future_timestamp_sentinels(series, visible_count=item.visible_count)
+            ctx_vals = _future_value_sentinels(series, visible_count=item.visible_count)
+            all_future_ts.extend(ctx_ts)
+            for text in (repr(item.history), str(item.history), f"{item.history!r}"):
+                _assert_text_excludes(text, ctx_ts, label="context history representation")
+                _assert_text_excludes(text, ctx_vals, label="context history representation")
+                if "Candle(" in text or "_source=" in text:
+                    self.public_source_exposed = True
+                    msg = "context history representation exposed candle/source content"
+                    raise StrategyBacktestValidationError(msg)
+
+        # Nested objects may include hashes; only timestamp sentinels are safe here.
+        nested_texts = [
+            repr(view),
+            str(view),
+            repr(context),
+            str(context),
+            f"{view!r}",
+            f"{context!r}",
+        ]
+        for item in view.contexts:
+            nested_texts.append(repr(item))
+            nested_texts.append(str(item))
+        future_ts = tuple(all_future_ts)
+        for text in nested_texts:
+            _assert_text_excludes(text, future_ts, label="nested representation")
 
     def _probe_history(
         self,
