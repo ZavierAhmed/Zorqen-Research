@@ -1,7 +1,8 @@
 # 0009 — Multi-Timeframe Backtest Decision Feed Traceability
 
-Milestone: **0.9 — Deterministic Multi-Timeframe Backtest Decision Feed**  
-Base commit: `3ac02582af357cf91a3080149abf470d2f60222c`
+Milestone: **0.9 / 0.9A — Deterministic Multi-Timeframe Backtest Decision Feed**  
+Base commit (0.9): `3ac02582af357cf91a3080149abf470d2f60222c`  
+Corrective base (0.9A): `b8080301a5f70d8a3ed42203479a4927778eb826`
 
 Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` · `NOT TESTED` · `NOT APPLICABLE`
 
@@ -18,7 +19,16 @@ Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` 
 | Warmup readiness + provider skip | adapter + runner | `test_adapter_warmup_direction_and_runner_envelope`, `test_warmup_zero_still_requires_closed_context` | PROVEN BY AUTOMATED TEST |
 | Unsupported direction fails without fill | adapter | `test_adapter_warmup_direction_and_runner_envelope` | PROVEN BY AUTOMATED TEST |
 | Provider list/exception sanitization | adapter + engine boundary | `test_provider_list_output_and_exception_sanitization` | PROVEN BY AUTOMATED TEST |
-| Envelope binds identities; forged construction fails | `StrategyBacktestEnvelope` | `test_envelope_hash_sensitivity_to_parameters_and_context` | PROVEN BY AUTOMATED TEST |
+| Envelope binds identities; forged construction fails | `StrategyBacktestEnvelope.from_run` | `test_envelope_*`, `test_envelope_rejects_raw_hash_factory_and_direct_construction` | PROVEN BY AUTOMATED TEST |
+| Envelope identity cannot be caller supplied | `from_run` derives hashes from bundle/policy/result | `test_envelope_rejects_raw_hash_factory_and_direct_construction`, `test_envelope_cannot_forge_identity_hashes_or_mismatched_result` | PROVEN BY AUTOMATED TEST |
+| Envelope count reconciliation | invocation + warmup skip == execution count | `test_envelope_count_reconciliation_and_types` | PROVEN BY AUTOMATED TEST |
+| Adapter identities come only from the feed | `MultiTimeframeProviderAdapter(feed, provider)` | `test_adapter_identities_only_from_feed_and_base_checks` | PROVEN BY AUTOMATED TEST |
+| Decision-view hashes come only from the bundle | `from_context_series` / `from_bundle` | `test_views_reject_caller_supplied_hashes_and_forged_factories` | PROVEN BY AUTOMATED TEST |
+| History views perform no prefix slicing | `VisibleCandleHistory.from_verified_source` | `test_visible_history_constant_time_construction` | PROVEN BY AUTOMATED TEST |
+| Per-bar construction is constant-time | feed `view_at` + verified source | `test_visible_history_constant_time_construction` | PROVEN BY AUTOMATED TEST |
+| Tuple subclasses are rejected | adapter `type(intents) is tuple` | `test_provider_exact_tuple_contract` | PROVEN BY AUTOMATED TEST |
+| Direction golden verifies the exact cause | `run_direction_restriction` | `test_direction_golden_exact_cause_and_truthful_invocation_count` | PROVEN BY AUTOMATED TEST |
+| Direction golden reports truthful provider invocation count | CLI payload `provider_invocation_count: 1` | `test_direction_golden_exact_cause_and_truthful_invocation_count`, MTF golden D | PROVEN BY AUTOMATED TEST |
 | Frozen MTF goldens A–E | `goldens.py` + CLI | `zorqen-backtest run-mtf-golden`, red-team CLI | PROVEN BY AUTOMATED TEST |
 | Existing seven result hashes unchanged | `BacktestEngine` untouched | `zorqen-backtest run-golden` | PROVEN BY AUTOMATED TEST |
 | Existing alignment/resample hashes unchanged | no 0.8A contract change | `zorqen-timeframes verify-golden` | PROVEN BY AUTOMATED TEST |
@@ -33,13 +43,16 @@ Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` 
 |---|---|---|---|---|
 | Future index / negative / slice / iteration | No future candles | Blocked | red-team / visible history | Visible end-exclusive view |
 | Wrong TF / missing / extra / swapped context | ValidationError | Failed | bundle / red-team | Exact definition match |
-| Forged bundle / envelope construction | ValidationError | Failed | red-team | Factory-only models |
+| Forged bundle / envelope construction | ValidationError | Failed | red-team / 0.9A envelope tests | Factory-only models |
+| Caller-supplied envelope / view hashes | Rejected | Failed | 0.9A identity binding tests | `from_run` / bundle-derived views |
 | Provider one bar too early | Not called / not ready | Passed | feed readiness + golden A | Warmup + alignment |
 | Exact-close withheld incorrectly | Ready at index 3 | Passed | golden A | Close-time mapping |
-| Unsupported direction | Controlled failure | Failed closed | adapter test / golden D | Direction gate |
-| List provider / raised provider | Sanitized execution error | Failed closed | provider tests | Existing engine boundary |
+| Unsupported direction | Exact cause + 1 invocation | Failed closed | direction golden / 0.9A test | Direction gate + truthful counts |
+| List / generator / tuple subclass provider | Sanitized execution error | Failed closed | `test_provider_exact_tuple_contract` | Exact `type is tuple` |
+| Multi-intent provider | Engine validation error | Failed closed | `test_provider_exact_tuple_contract` | Existing one-intent limit |
 | Warmup zero, no closed context | Not ready | Passed | warmup-zero test | `max(1, warmup)` |
 | Mutable list input | ValidationError | Failed | bundle tests | Tuple requirement |
 | Context candle change | Bundle/envelope change | Passed | golden E / envelope sensitivity | Hash binding |
+| O(n) prefix copy per bar | Constant-time view construction | Passed | instrumented history test | VerifiedHistorySource + end_exclusive |
 
 No remaining mandatory untested bypasses after the red-team loop.

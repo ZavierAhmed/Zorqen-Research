@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.8A): `3ac02582af357cf91a3080149abf470d2f60222c`
-- Milestone 0.9 base commit: `3ac02582af357cf91a3080149abf470d2f60222c`
+- Previous verified commit (Milestone 0.9): `b8080301a5f70d8a3ed42203479a4927778eb826`
+- Milestone 0.9A base commit: `b8080301a5f70d8a3ed42203479a4927778eb826`
 - Milestone result commit: current HEAD containing this status update (exact SHA after commit).
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
 - Current environment: Windows development laptop
@@ -23,25 +23,25 @@ Unchanged. Research qualification only; no account/trading APIs.
 
 ## 3. Initial Strategy Scope
 
-Family metadata remains seeded. Milestone 0.9 adds the multi-timeframe decision feed only — no executable Adaptive MTF / Support-Resistance algorithms.
+Family metadata remains seeded. Milestone 0.9A is a corrective identity/performance fix only — no executable Adaptive MTF / Support-Resistance algorithms.
 
 ## 4. Current Milestone
 
-- Milestone: `0.9` — Deterministic Multi-Timeframe Backtest Decision Feed
+- Milestone: `0.9A` — Bind MTF run identity and optimize decision views
 - Status: Complete pending independent review and all four GitHub checks green after push
-- Base: `3ac02582af357cf91a3080149abf470d2f60222c`
+- Base: `b8080301a5f70d8a3ed42203479a4927778eb826`
 - Work completed:
-  - Factory-bound `MultiTimeframeBacktestInput` + decision feed/views
-  - `MultiTimeframeDecisionProvider` + engine adapter + runner
-  - `StrategyBacktestEnvelope` identity binding
-  - Frozen MTF goldens + `zorqen-backtest run-mtf-golden`
-  - ADR 0009 + traceability 0009 (0 NOT TESTED)
+  - `StrategyBacktestEnvelope.from_run` derives all logical hashes; no caller-hash factory
+  - Adapter/view factories bind identities only from the feed/bundle
+  - `VerifiedHistorySource` + O(1) per-bar `VisibleCandleHistory.from_verified_source`
+  - Exact tuple contract (`type is tuple`); direction golden proves unsupported-direction cause with truthful invocation count
+  - Traceability 0009 rows for 0.9A (0 NOT TESTED)
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
 ## 5. Latest Verified State
 
-Fixture / dataset / strategy-definition / resampling / alignment hashes: unchanged from Milestone 0.8A (see prior status).
+Fixture / dataset / strategy-definition / resampling / alignment hashes: unchanged from Milestone 0.8A / 0.9.
 
 Golden backtest hashes (unchanged):
 
@@ -55,13 +55,21 @@ a9273a5972f6bbae9dc9443385a2d3076dfc2a7549699e4a803e5899e2f928a6
 b342b5be8e4943a1bf82abbe26e3329424447515062df4e728154e47dea71c7d
 ```
 
-Selected MTF bridge golden hashes:
+Selected MTF bridge golden hashes (unchanged):
 
 ```text
 exact-close bundle:   1ef63eff5e42d00d2d3edabbc849a3f1f651929c3ba52abbc08fd64497794167
 exact-close envelope: 8e5259d68e152ee3c1b0767ec372866ddcbb8b67eeae96175345e2512879b70d
-two-contexts align:   1ced7609616bfc7e79039cd8ac9cbead378c7feffbeeec5db4bda3b7174f48ac
 two-contexts envelope:c0945d5d2609c958a2cdae155e65606e59233a6fc6c03ec6906bc8065bfa0d94
+```
+
+Direction-restriction CLI payload now reports:
+
+```text
+controlled_failure: true
+provider_invocation_count: 1
+first_ready_index: 3
+error_code: unsupported_direction
 ```
 
 ## 6–8. Product / Architecture / Research Engine
@@ -70,31 +78,31 @@ No strategy algorithms, indicators, dynamic provider factories, persistence/API/
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 0.9 and confirmation that all four GitHub checks are green after push.
+Awaiting independent review of Milestone 0.9A and confirmation that all four GitHub checks are green after push.
 
-## 10. Verification Evidence (Milestone 0.9)
+## 10. Verification Evidence (Milestone 0.9A)
 
 Commands actually executed:
 
 ```text
 uv sync --frozen --all-extras
 uv run ruff check .                                            # All checks passed
-uv run ruff format --check .                                   # 211 files already formatted
+uv run ruff format --check .                                   # 212 files already formatted
 uv run mypy src                                                # Success: 129 source files
-uv run pytest tests/unit -k "multi_timeframe or decision_feed or strategy_backtest" -q
-                                                               # 12 passed, 463 deselected
-uv run pytest tests/unit -q                                    # 475 passed (Win + Linux)
+uv run pytest tests/unit -k "multi_timeframe or decision_feed or strategy_backtest or identity_binding_09a" -q
+                                                               # 21 passed, 463 deselected
+uv run pytest tests/unit -q                                    # 484 passed (Win + Linux)
 uv run pytest tests/integration/test_artifact_filesystem.py -q # 9 passed
-uv run pytest tests/integration -q -m integration              # 34 passed
+uv run pytest tests/integration -q -m integration              # 34 passed (with Postgres)
 uv run pytest tests/integration/test_candle_query.py -q        # 5 passed
-alembic downgrade base / upgrade head                          # 0001/0002/0003 only
-uv run zorqen-backtest run-golden --scenario all               # twice, byte-identical
-uv run zorqen-timeframes verify-golden --scenario all          # twice, byte-identical
-uv run zorqen-backtest run-mtf-golden --scenario all           # twice, byte-identical
-uv run python -m zorqen_research.worker --check                # OK
+alembic downgrade base / upgrade head (×2)                     # 0001/0002/0003 only
+uv run zorqen-backtest run-golden --scenario all               # twice, hashes preserved
+uv run zorqen-timeframes verify-golden --scenario all          # twice, hashes preserved
+uv run zorqen-backtest run-mtf-golden --scenario all           # twice, hashes preserved
+uv run python -m zorqen_research.worker --check                # PostgreSQL reachable
 frontend npm ci / lint / test --run / build                    # 15 passed; build ok
-docker compose build + nginx live/ready/families/datasets      # 200; fixture hash preserved
-Linux container (node:22-bookworm): quality.yml sequence       # ruff/mypy; 475 unit; frontend 15 + build
+docker compose build + nginx live/ready/families/fixture       # 200; fixture hash preserved
+Linux container (node:22-bookworm): quality.yml sequence       # ruff/mypy; 484 unit; frontend 15 + build
 ```
 
 Traceability: `docs/verification/0009-multi-timeframe-backtest-traceability.md` — **NOT TESTED: 0**
@@ -109,4 +117,4 @@ GitHub Actions: unknown until push.
 
 ## 12. Next Authorized Work
 
-None until Milestone 0.9 is independently accepted. Milestone 1.0 is not authorized.
+None until Milestone 0.9A is independently accepted. Milestone 1.0 is not authorized.

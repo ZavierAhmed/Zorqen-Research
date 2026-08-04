@@ -47,32 +47,36 @@ class MultiTimeframeProviderAdapter:
         *,
         feed: MultiTimeframeDecisionFeed,
         provider: MultiTimeframeDecisionProvider,
-        definition: StrategyDefinition,
-        strategy_instance_hash: str,
     ) -> None:
         if not isinstance(feed, MultiTimeframeDecisionFeed):
             msg = "feed must be a MultiTimeframeDecisionFeed"
             raise StrategyBacktestValidationError(msg)
-        if not isinstance(definition, StrategyDefinition):
-            msg = "definition must be a StrategyDefinition"
-            raise StrategyBacktestValidationError(msg)
         self._feed = feed
         self._provider = provider
-        self._definition = definition
-        self._strategy_instance_hash = strategy_instance_hash
+        self._definition: StrategyDefinition = feed.bundle.strategy_instance.definition
+        self._strategy_instance_hash = feed.bundle.strategy_instance_hash
+        self._input_bundle_hash = feed.bundle.input_bundle_hash
         self.provider_invocation_count = 0
         self.warmup_skipped_decision_count = 0
 
     def on_bar_close(self, context: BacktestDecisionContext) -> tuple[BacktestIntent, ...]:
+        bundle = self._feed.bundle
+        if context.symbol != bundle.symbol:
+            msg = "engine symbol does not match input bundle symbol"
+            raise StrategyBacktestValidationError(msg)
+        if context.timeframe is not bundle.execution_timeframe:
+            msg = "engine timeframe does not match execution timeframe"
+            raise StrategyBacktestValidationError(msg)
+        if context.candles_processed != context.bar_index + 1:
+            msg = "candles_processed must equal bar_index + 1"
+            raise StrategyBacktestValidationError(msg)
+
         view = self._feed.view_at(context.bar_index)
         if context.bar_index != view.execution_bar_index:
             msg = "engine bar_index does not match decision feed view"
             raise StrategyBacktestValidationError(msg)
         if context.candle != view.current_execution_candle:
             msg = "engine candle does not match decision feed view"
-            raise StrategyBacktestValidationError(msg)
-        if context.timeframe is not self._feed.bundle.execution_timeframe:
-            msg = "engine timeframe does not match execution timeframe"
             raise StrategyBacktestValidationError(msg)
 
         if not view.overall_ready:
@@ -82,12 +86,12 @@ class MultiTimeframeProviderAdapter:
         enhanced = MultiTimeframeBacktestDecisionContext(
             base=context,
             strategy_instance_hash=self._strategy_instance_hash,
-            input_bundle_hash=self._feed.bundle.input_bundle_hash,
+            input_bundle_hash=self._input_bundle_hash,
             view=view,
         )
         self.provider_invocation_count += 1
         intents = self._provider.on_bar_close(enhanced)
-        if not isinstance(intents, tuple):
+        if type(intents) is not tuple:
             msg = "Multi-timeframe provider must return an exact tuple"
             raise BacktestValidationError(msg)
         for intent in intents:

@@ -216,7 +216,7 @@ def test_adapter_warmup_direction_and_runner_envelope() -> None:
     assert envelope.provider_invocation_count == 5
     assert envelope.result.summary.closed_trade_count == 1
     assert provider.calls[0] == 3
-    with pytest.raises(StrategyBacktestValidationError):
+    with pytest.raises(StrategyBacktestValidationError, match="from_run"):
         StrategyBacktestEnvelope()
 
     # Unsupported direction.

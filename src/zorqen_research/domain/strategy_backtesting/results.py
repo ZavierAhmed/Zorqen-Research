@@ -6,8 +6,10 @@ import json
 from dataclasses import dataclass
 
 from zorqen_research.domain.artifacts import sha256_hex
+from zorqen_research.domain.backtesting.policy import BacktestPolicy
 from zorqen_research.domain.backtesting.results import BacktestResult
 from zorqen_research.domain.strategy_backtesting.errors import StrategyBacktestValidationError
+from zorqen_research.domain.strategy_backtesting.inputs import MultiTimeframeBacktestInput
 
 _ENVELOPE_SCHEMA = "1"
 
@@ -28,22 +30,25 @@ class StrategyBacktestEnvelope:
     envelope_hash: str
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        msg = "StrategyBacktestEnvelope must be created via from_verified"
+        msg = "StrategyBacktestEnvelope must be created via from_run"
         raise StrategyBacktestValidationError(msg)
 
     @classmethod
-    def from_verified(
+    def from_run(
         cls,
         *,
-        strategy_instance_hash: str,
-        input_bundle_hash: str,
-        execution_candle_sha256: str,
-        multi_context_alignment_hash: str,
-        policy_hash: str,
+        input_bundle: MultiTimeframeBacktestInput,
+        policy: BacktestPolicy,
         result: BacktestResult,
         provider_invocation_count: int,
         warmup_skipped_decision_count: int,
     ) -> StrategyBacktestEnvelope:
+        if not isinstance(input_bundle, MultiTimeframeBacktestInput):
+            msg = "input_bundle must be a MultiTimeframeBacktestInput"
+            raise StrategyBacktestValidationError(msg)
+        if not isinstance(policy, BacktestPolicy):
+            msg = "policy must be a BacktestPolicy"
+            raise StrategyBacktestValidationError(msg)
         if not isinstance(result, BacktestResult):
             msg = "result must be a BacktestResult"
             raise StrategyBacktestValidationError(msg)
@@ -60,13 +65,32 @@ class StrategyBacktestEnvelope:
         if provider_invocation_count < 0 or warmup_skipped_decision_count < 0:
             msg = "invocation and warmup-skip counts must be non-negative"
             raise StrategyBacktestValidationError(msg)
+        if (
+            provider_invocation_count + warmup_skipped_decision_count
+            != input_bundle.execution_candle_count
+        ):
+            msg = (
+                "provider_invocation_count + warmup_skipped_decision_count "
+                "must equal execution_candle_count"
+            )
+            raise StrategyBacktestValidationError(msg)
+
+        # Deferred import keeps CSV/policy hashing on the application contract.
+        from zorqen_research.application.backtesting.serialization import hash_policy
+
+        policy_digest = hash_policy(policy)
+        if result.summary.policy_hash != policy_digest:
+            msg = "result policy_hash does not match the supplied policy"
+            raise StrategyBacktestValidationError(msg)
+        if result.summary.input_candle_hash != input_bundle.execution_candle_sha256:
+            msg = "result input_candle_hash does not match the input bundle execution hash"
+            raise StrategyBacktestValidationError(msg)
+
+        strategy_instance_hash = input_bundle.strategy_instance_hash
+        input_bundle_hash = input_bundle.input_bundle_hash
+        execution_candle_sha256 = input_bundle.execution_candle_sha256
+        multi_context_alignment_hash = input_bundle.multi_context_alignment.alignment_hash
         backtest_result_hash = result.summary.result_hash
-        if result.summary.policy_hash != policy_hash:
-            msg = "policy_hash does not match BacktestResult summary"
-            raise StrategyBacktestValidationError(msg)
-        if result.summary.input_candle_hash != execution_candle_sha256:
-            msg = "execution_candle_sha256 does not match BacktestResult input hash"
-            raise StrategyBacktestValidationError(msg)
         digest = sha256_hex(
             json.dumps(
                 {
@@ -74,7 +98,7 @@ class StrategyBacktestEnvelope:
                     "execution_candle_sha256": execution_candle_sha256,
                     "input_bundle_hash": input_bundle_hash,
                     "multi_context_alignment_hash": multi_context_alignment_hash,
-                    "policy_hash": policy_hash,
+                    "policy_hash": policy_digest,
                     "provider_invocation_count": provider_invocation_count,
                     "schema_version": _ENVELOPE_SCHEMA,
                     "strategy_instance_hash": strategy_instance_hash,
@@ -90,7 +114,7 @@ class StrategyBacktestEnvelope:
         object.__setattr__(self, "input_bundle_hash", input_bundle_hash)
         object.__setattr__(self, "execution_candle_sha256", execution_candle_sha256)
         object.__setattr__(self, "multi_context_alignment_hash", multi_context_alignment_hash)
-        object.__setattr__(self, "policy_hash", policy_hash)
+        object.__setattr__(self, "policy_hash", policy_digest)
         object.__setattr__(self, "backtest_result_hash", backtest_result_hash)
         object.__setattr__(self, "result", result)
         object.__setattr__(self, "provider_invocation_count", provider_invocation_count)

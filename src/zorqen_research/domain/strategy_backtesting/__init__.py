@@ -9,7 +9,10 @@ from zorqen_research.domain.strategy_backtesting.errors import (
     StrategyBacktestError,
     StrategyBacktestValidationError,
 )
-from zorqen_research.domain.strategy_backtesting.histories import VisibleCandleHistory
+from zorqen_research.domain.strategy_backtesting.histories import (
+    VerifiedHistorySource,
+    VisibleCandleHistory,
+)
 from zorqen_research.domain.strategy_backtesting.inputs import (
     ContextSeriesInput,
     MultiTimeframeBacktestInput,
@@ -24,6 +27,7 @@ __all__ = [
     "StrategyBacktestEnvelope",
     "StrategyBacktestError",
     "StrategyBacktestValidationError",
+    "VerifiedHistorySource",
     "VisibleCandleHistory",
     "required_visible_count",
 ]

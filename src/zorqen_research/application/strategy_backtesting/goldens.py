@@ -20,7 +20,10 @@ from zorqen_research.application.strategy_backtesting.provider import (
 from zorqen_research.application.strategy_backtesting.runner import MultiTimeframeBacktestRunner
 from zorqen_research.application.strategy_definitions.serialization import build_instance
 from zorqen_research.domain.backtesting.enums import PositionDirection
-from zorqen_research.domain.backtesting.errors import BacktestExecutionError
+from zorqen_research.domain.backtesting.errors import (
+    BacktestExecutionError,
+    BacktestValidationError,
+)
 from zorqen_research.domain.backtesting.intents import BacktestIntent, EnterIntent
 from zorqen_research.domain.backtesting.policy import BacktestPolicy
 from zorqen_research.domain.candles import Candle
@@ -296,9 +299,10 @@ MTF_GOLDENS: dict[str, MtfGoldenExpectation] = {
         alignment_hash="",
         backtest_result_hash="",
         envelope_hash="",
-        provider_invocation_count=0,
-        warmup_skipped_count=0,
+        provider_invocation_count=1,
+        warmup_skipped_count=3,
         closed_trade_count=0,
+        first_ready_index=3,
         controlled_failure=True,
     ),
     "context-sensitivity": MtfGoldenExpectation(
@@ -413,6 +417,19 @@ def run_two_contexts() -> dict[str, object]:
     return _assert_envelope(expectation, bundle, envelope)
 
 
+def _cause_chain_has_unsupported_direction(exc: BaseException) -> bool:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, BacktestValidationError):
+            text = str(current)
+            if "not supported by the strategy definition" in text and "short" in text:
+                return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def run_direction_restriction() -> dict[str, object]:
     expectation = MTF_GOLDENS["direction-restriction"]
     definition = mtf_definition(
@@ -421,24 +438,51 @@ def run_direction_restriction() -> dict[str, object]:
         directions=(PositionDirection.LONG,),
         definition_code="mtf_long_only",
     )
+    if definition.supported_directions != (PositionDirection.LONG,):
+        msg = "direction-restriction: definition must be long-only"
+        raise MtfGoldenMismatchError(msg)
     execution = build_source_series(start=START, timeframe=Timeframe.H1, count=8)
     context = build_source_series(start=START, timeframe=Timeframe.H4, count=2)
     intent = _enter_short(decision_open=execution[3].open_time, intent_id="mtf-short-denied")
+    if intent.direction is not PositionDirection.SHORT:
+        msg = "direction-restriction: provider must return a short entry"
+        raise MtfGoldenMismatchError(msg)
     provider = ScriptedMtfProvider(first_ready_intent=(intent,))
+    instance = build_instance(definition, {"signal_strength": 1})
+    bundle = MultiTimeframeBacktestInput.from_verified(
+        strategy_instance=instance,
+        symbol=SYMBOL,
+        execution_candles=execution,
+        context_series=((Timeframe.H4, context),),
+    )
+    feed = MultiTimeframeDecisionFeed.from_input(bundle)
+    if not feed.view_at(expectation.first_ready_index or 3).overall_ready:
+        msg = "direction-restriction: provider must first become ready at expected bar"
+        raise MtfGoldenMismatchError(msg)
     try:
-        _run_envelope(
-            definition=definition,
-            execution=execution,
-            contexts=((Timeframe.H4, context),),
+        MultiTimeframeBacktestRunner.run(
+            input_bundle=bundle,
+            policy=default_policy(),
             provider=provider,
         )
-    except BacktestExecutionError:
+    except BacktestExecutionError as exc:
+        if "Decision provider failed" not in str(exc):
+            msg = "direction-restriction: public exception must be sanitized engine error"
+            raise MtfGoldenMismatchError(msg) from exc
+        if not _cause_chain_has_unsupported_direction(exc):
+            msg = "direction-restriction: cause chain missing unsupported-direction failure"
+            raise MtfGoldenMismatchError(msg) from exc
+        if provider.calls != [expectation.first_ready_index]:
+            msg = "direction-restriction: provider must be called exactly once at first ready bar"
+            raise MtfGoldenMismatchError(msg) from exc
         return {
             "ok": True,
             "scenario": expectation.scenario,
             "controlled_failure": True,
-            "provider_invocation_count": 0,
-            "warmup_skipped_count": 0,
+            "provider_invocation_count": len(provider.calls),
+            "first_ready_index": expectation.first_ready_index,
+            "error_code": "unsupported_direction",
+            "warmup_skipped_count": expectation.warmup_skipped_count,
             "closed_trade_count": 0,
             "strategy_instance_hash": None,
             "input_bundle_hash": None,
@@ -447,7 +491,7 @@ def run_direction_restriction() -> dict[str, object]:
             "backtest_result_hash": None,
             "envelope_hash": None,
         }
-    msg = "direction-restriction: expected controlled failure"
+    msg = "direction-restriction: expected controlled failure with no result envelope"
     raise MtfGoldenMismatchError(msg)
 
 

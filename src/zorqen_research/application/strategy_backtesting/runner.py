@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from zorqen_research.application.backtesting.engine import BacktestEngine
-from zorqen_research.application.backtesting.serialization import hash_policy
 from zorqen_research.application.strategy_backtesting.feed import MultiTimeframeDecisionFeed
 from zorqen_research.application.strategy_backtesting.provider import (
     MultiTimeframeDecisionProvider,
@@ -36,8 +35,6 @@ class MultiTimeframeBacktestRunner:
         adapter = MultiTimeframeProviderAdapter(
             feed=feed,
             provider=provider,
-            definition=input_bundle.strategy_instance.definition,
-            strategy_instance_hash=input_bundle.strategy_instance_hash,
         )
         engine = BacktestEngine(
             symbol=input_bundle.symbol,
@@ -49,12 +46,9 @@ class MultiTimeframeBacktestRunner:
             input_bundle.execution_candles,
             expected_input_hash=input_bundle.execution_candle_sha256,
         )
-        return StrategyBacktestEnvelope.from_verified(
-            strategy_instance_hash=input_bundle.strategy_instance_hash,
-            input_bundle_hash=input_bundle.input_bundle_hash,
-            execution_candle_sha256=input_bundle.execution_candle_sha256,
-            multi_context_alignment_hash=input_bundle.multi_context_alignment.alignment_hash,
-            policy_hash=hash_policy(policy),
+        return StrategyBacktestEnvelope.from_run(
+            input_bundle=input_bundle,
+            policy=policy,
             result=result,
             provider_invocation_count=adapter.provider_invocation_count,
             warmup_skipped_decision_count=adapter.warmup_skipped_decision_count,
