@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from zorqen_research.application.indicators.assembly import _calculated_indicator_series
 from zorqen_research.domain.indicators.enums import IndicatorCode
 from zorqen_research.domain.indicators.inputs import IndicatorInput
 from zorqen_research.domain.indicators.math_policy import (
@@ -40,7 +41,7 @@ def ema_close(indicator_input: IndicatorInput, period: object) -> IndicatorSerie
                 previous = previous + alpha * (close - previous)
                 values[index] = previous
 
-    return IndicatorSeries.from_calculation(
+    return _calculated_indicator_series(
         indicator_code=IndicatorCode.EMA_CLOSE,
         indicator_input=indicator_input,
         parameters={"period": period_i},

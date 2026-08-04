@@ -49,6 +49,14 @@ class IndicatorInput:
         if not isinstance(timeframe, Timeframe):
             msg = "timeframe must be a Timeframe"
             raise IndicatorValidationError(msg)
+        # Exact runtime types before any iteration, hashing, or retention.
+        if type(candles) is not tuple:
+            msg = "candles must be an exact tuple"
+            raise IndicatorValidationError(msg)
+        for index, candle in enumerate(candles):
+            if type(candle) is not Candle:
+                msg = f"candles[{index}] must be an exact Candle"
+                raise IndicatorValidationError(msg)
         try:
             verified = require_canonical_series(
                 candles,
@@ -57,6 +65,9 @@ class IndicatorInput:
             )
         except ResamplingValidationError as exc:
             raise IndicatorValidationError(str(exc)) from exc
+        if verified is not candles:
+            msg = "verified candle tuple identity must match the caller-supplied tuple"
+            raise IndicatorValidationError(msg)
 
         candle_sha256 = hash_candle_tuple(verified)
         digest = sha256_hex(

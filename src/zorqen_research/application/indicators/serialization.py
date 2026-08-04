@@ -15,8 +15,8 @@ from zorqen_research.domain.timeframes import Timeframe
 
 
 def _parameter_document(
-    parameters: tuple[tuple[str, int | str | bool], ...],
-) -> dict[str, int | str | bool]:
+    parameters: tuple[tuple[str, int], ...],
+) -> dict[str, int]:
     return {key: value for key, value in parameters}
 
 
@@ -38,7 +38,7 @@ def build_indicator_series_document(
     timeframe: Timeframe,
     input_candle_sha256: str,
     input_candle_count: int,
-    parameters: tuple[tuple[str, int | str | bool], ...],
+    parameters: tuple[tuple[str, int], ...],
     first_defined_index: int | None,
     defined_value_count: int,
     math_policy: IndicatorMathPolicy,
@@ -72,7 +72,7 @@ def serialize_indicator_series_bytes(
     timeframe: Timeframe,
     input_candle_sha256: str,
     input_candle_count: int,
-    parameters: tuple[tuple[str, int | str | bool], ...],
+    parameters: tuple[tuple[str, int], ...],
     first_defined_index: int | None,
     defined_value_count: int,
     math_policy: IndicatorMathPolicy,
@@ -107,7 +107,7 @@ def hash_indicator_series_payload(
     timeframe: Timeframe,
     input_candle_sha256: str,
     input_candle_count: int,
-    parameters: tuple[tuple[str, int | str | bool], ...],
+    parameters: tuple[tuple[str, int], ...],
     first_defined_index: int | None,
     defined_value_count: int,
     math_policy: IndicatorMathPolicy,

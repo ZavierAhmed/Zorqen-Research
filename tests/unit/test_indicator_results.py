@@ -1,4 +1,4 @@
-"""IndicatorSeries integrity and serialization tests."""
+"""IndicatorSeries integrity under calculator-owned construction."""
 
 from __future__ import annotations
 
@@ -7,11 +7,13 @@ from decimal import Decimal
 import pytest
 
 from tests.unit.indicator_helpers import indicator_input_from_specs
+from zorqen_research.application.indicators.assembly import _calculated_indicator_series
 from zorqen_research.application.indicators.ema import ema_close
 from zorqen_research.application.indicators.serialization import (
     hash_indicator_series,
     serialize_indicator_series,
 )
+from zorqen_research.application.indicators.volatility import true_range
 from zorqen_research.domain.indicators.enums import IndicatorCode
 from zorqen_research.domain.indicators.errors import IndicatorValidationError
 from zorqen_research.domain.indicators.math_policy import IndicatorMathPolicy
@@ -28,10 +30,14 @@ def _base_input():
     )
 
 
+def test_public_api_has_no_from_calculation_factory() -> None:
+    assert not hasattr(IndicatorSeries, "from_calculation")
+
+
 def test_series_rejects_values_length_mismatch() -> None:
     indicator_input = _base_input()
     with pytest.raises(IndicatorValidationError, match="length"):
-        IndicatorSeries.from_calculation(
+        _calculated_indicator_series(
             indicator_code=IndicatorCode.EMA_CLOSE,
             indicator_input=indicator_input,
             parameters={"period": 2},
@@ -42,12 +48,12 @@ def test_series_rejects_values_length_mismatch() -> None:
 def test_series_rejects_float_int_bool_values() -> None:
     indicator_input = _base_input()
     for bad in (1.5, 1, True):
-        with pytest.raises(IndicatorValidationError, match="Decimal or None"):
-            IndicatorSeries.from_calculation(
+        with pytest.raises(IndicatorValidationError, match="exact Decimal or None"):
+            _calculated_indicator_series(
                 indicator_code=IndicatorCode.EMA_CLOSE,
                 indicator_input=indicator_input,
                 parameters={"period": 1},
-                values=(bad, None, None),  # type: ignore[arg-type]
+                values=(bad, Decimal("2"), Decimal("3")),  # type: ignore[arg-type]
             )
 
 
@@ -55,16 +61,16 @@ def test_series_rejects_nan_and_infinity() -> None:
     indicator_input = _base_input()
     for bad in (Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")):
         with pytest.raises(IndicatorValidationError, match="finite"):
-            IndicatorSeries.from_calculation(
+            _calculated_indicator_series(
                 indicator_code=IndicatorCode.EMA_CLOSE,
                 indicator_input=indicator_input,
                 parameters={"period": 1},
-                values=(bad, None, None),
+                values=(bad, Decimal("2"), Decimal("3")),
             )
 
 
 def test_series_rejects_direct_forged_construction() -> None:
-    with pytest.raises(IndicatorValidationError, match="from_calculation"):
+    with pytest.raises(IndicatorValidationError, match="calculators"):
         IndicatorSeries(  # type: ignore[call-arg]
             schema_version="1",
             indicator_code=IndicatorCode.EMA_CLOSE,
@@ -85,7 +91,7 @@ def test_series_rejects_direct_forged_construction() -> None:
 def test_series_rejects_forged_math_policy_instance() -> None:
     indicator_input = _base_input()
     with pytest.raises(IndicatorValidationError, match="math policy"):
-        IndicatorSeries.from_calculation(
+        _calculated_indicator_series(
             indicator_code=IndicatorCode.EMA_CLOSE,
             indicator_input=indicator_input,
             parameters={"period": 1},
@@ -120,11 +126,11 @@ def test_deterministic_canonical_bytes_and_hash_sensitivity() -> None:
 
 def test_signed_zero_serializes_as_zero() -> None:
     indicator_input = _base_input()
-    series = IndicatorSeries.from_calculation(
+    series = _calculated_indicator_series(
         indicator_code=IndicatorCode.TRUE_RANGE,
         indicator_input=indicator_input,
         parameters={},
-        values=(Decimal("-0"), Decimal("0"), None),
+        values=(Decimal("-0"), Decimal("0"), Decimal("1")),
     )
     payload = serialize_indicator_series(series).decode("utf-8")
     assert '"0"' in payload
@@ -134,9 +140,16 @@ def test_signed_zero_serializes_as_zero() -> None:
 def test_unknown_indicator_code_type_rejected() -> None:
     indicator_input = _base_input()
     with pytest.raises(IndicatorValidationError, match="IndicatorCode"):
-        IndicatorSeries.from_calculation(
+        _calculated_indicator_series(
             indicator_code="ema_close",  # type: ignore[arg-type]
             indicator_input=indicator_input,
             parameters={"period": 1},
             values=(Decimal("1"), Decimal("2"), Decimal("3")),
         )
+
+
+def test_accepted_result_always_serializes_to_utf8() -> None:
+    series = true_range(_base_input())
+    payload = serialize_indicator_series(series)
+    assert isinstance(payload, bytes)
+    payload.decode("utf-8")

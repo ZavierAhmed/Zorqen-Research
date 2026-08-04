@@ -19,7 +19,7 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 Milestone **1.0** adds a pure deterministic indicator series foundation:
 
-- Factory-bound `IndicatorInput` and immutable `IndicatorSeries`
+- Factory-bound `IndicatorInput` and immutable `IndicatorSeries` (calculator-owned assembly only)
 - Fixed local Decimal math policy (`schema_version=1`, precision `50`, `ROUND_HALF_EVEN`)
 - Indicators: `ema_close`, `true_range`, `wilder_atr`, `rolling_highest`, `rolling_lowest`, `prior_rolling_highest`, `prior_rolling_lowest`
 - Warmup values are `None` (JSON `null`); defined values are finite `Decimal` only

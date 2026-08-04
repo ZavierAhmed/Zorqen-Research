@@ -14,7 +14,7 @@ Complete offline `IndicatorSeries` objects may contain values for bars that woul
 
 1. **Pure indicator kernel.** Domain models (`IndicatorInput`, `IndicatorSeries`, math policy, codes) and application calculators live outside API, persistence, and strategy-provider packages. No NumPy, pandas, or TA-Lib.
 2. **Fixed local Decimal policy.** Schema `"1"`, precision `50`, `ROUND_HALF_EVEN`. Every division and recurrence runs under `decimal.localcontext`. Callers cannot supply alternate precision. Process-global Decimal context mutations must not alter outputs.
-3. **Factory-bound input and results.** `IndicatorInput.from_verified` and `IndicatorSeries.from_calculation` compute metadata and SHA-256 hashes; direct construction is rejected. Candle identity reuses the canonical CSV serializer.
+3. **Factory-bound input and calculator-owned results.** `IndicatorInput.from_verified` requires exact `tuple` / `Candle` runtime types and computes metadata and SHA-256 hashes. `IndicatorSeries` is assembled only by calculator-owned `_calculated_indicator_series`, which enforces code-specific parameters, warmup shape, and non-negativity. Direct construction and public value injection are rejected. Candle identity reuses the canonical CSV serializer.
 4. **Warmup as `None`.** Undefined warmup slots are JSON `null` / Python `None`, never NaN.
 5. **EMA.** Seed with SMA of the first `P` closes at index `P-1`; then `ema += α*(close-ema)` with `α=2/(P+1)`. Period `1` equals close.
 6. **True Range / Wilder ATR.** First TR is high−low; later TR is the max of high−low and absolute gaps to prior close. ATR seeds on the mean of the first `P` TR values, then Wilder recurrence `(ATR*(P-1)+TR)/P`.

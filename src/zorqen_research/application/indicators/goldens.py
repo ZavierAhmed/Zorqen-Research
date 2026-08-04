@@ -85,6 +85,18 @@ EMA_CLOSE_CANDLES = _series(
     )
 )
 
+# Nonlinear closes: recursive EMA must diverge from rolling SMA of the same window.
+EMA_RECURSIVE_CANDLES = _series(
+    (
+        ("10", "10", "10", "10"),
+        ("20", "20", "20", "20"),
+        ("5", "5", "5", "5"),
+        ("30", "30", "30", "30"),
+        ("7", "7", "7", "7"),
+        ("40", "40", "40", "40"),
+    )
+)
+
 TRUE_RANGE_CANDLES = _series(
     (
         ("10", "12", "10", "11"),
@@ -146,6 +158,18 @@ EMA_CLOSE_GOLDEN = IndicatorGoldenExpectation(
     defined_value_count=3,
     expected_values=(None, None, "11", "12", "13"),
     result_hash="982dcb739655d2eb018e74911c8d53a66a9f86555ffa74aa8111c7134482d303",
+)
+
+EMA_RECURSIVE_GOLDEN = IndicatorGoldenExpectation(
+    scenario="ema-recursive",
+    indicator_code="ema_close",
+    input_candle_count=6,
+    input_candle_hash="a791a7aeefe2d1745e1a4ed6515818d894fd7727f2cc389300b4b0a85401ee1e",
+    input_hash="a782202e13fb772aaade4f623f88412b08b32682d094a70304516bded0f33cfb",
+    first_defined_index=3,
+    defined_value_count=3,
+    expected_values=(None, None, None, "16.25", "12.55", "23.53"),
+    result_hash="c59617e531bf61918fbfe349774618df18259f76723275f3d543ac3241779f96",
 )
 
 TRUE_RANGE_GOLDEN = IndicatorGoldenExpectation(
@@ -226,6 +250,7 @@ DECIMAL_CONTEXT_GOLDEN = IndicatorGoldenExpectation(
 
 ALL_SCENARIO_NAMES: tuple[str, ...] = (
     "ema-close",
+    "ema-recursive",
     "true-range",
     "wilder-atr",
     "rolling-extrema",
@@ -354,6 +379,17 @@ def run_scenario(name: str) -> dict[str, object]:
         return _check_single(
             expected=EMA_CLOSE_GOLDEN,
             series=ema_close(indicator_input, 3),
+            indicator_input=indicator_input,
+        )
+    if name == "ema-recursive":
+        indicator_input = IndicatorInput.from_verified(
+            symbol=SYMBOL,
+            timeframe=TIMEFRAME,
+            candles=EMA_RECURSIVE_CANDLES,
+        )
+        return _check_single(
+            expected=EMA_RECURSIVE_GOLDEN,
+            series=ema_close(indicator_input, 4),
             indicator_input=indicator_input,
         )
     if name == "true-range":

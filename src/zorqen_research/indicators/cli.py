@@ -53,8 +53,11 @@ def main(argv: list[str] | None = None) -> int:
         exit_code = 0
         for name in ALL_SCENARIO_NAMES:
             ok, payload = _run_one(name)
-            print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
-            if not ok:
+            text = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+            if ok:
+                print(text)
+            else:
+                print(text, file=sys.stderr)
                 exit_code = 1
         return exit_code
     ok, payload = _run_one(args.scenario)

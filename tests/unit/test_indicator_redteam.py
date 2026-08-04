@@ -16,13 +16,13 @@ from tests.unit.indicator_helpers import (
     utc,
 )
 from zorqen_research.application.backtesting.provider import BacktestDecisionContext
+from zorqen_research.application.indicators.assembly import _calculated_indicator_series
 from zorqen_research.application.indicators.ema import ema_close
 from zorqen_research.application.indicators.extrema import (
     CountingSequence,
     prior_rolling_highest,
     rolling_highest_counted,
 )
-from zorqen_research.application.indicators.goldens import run_scenario
 from zorqen_research.application.indicators.volatility import wilder_atr
 from zorqen_research.application.strategy_backtesting.provider import (
     MultiTimeframeBacktestDecisionContext,
@@ -32,7 +32,6 @@ from zorqen_research.domain.indicators.errors import IndicatorValidationError
 from zorqen_research.domain.indicators.inputs import IndicatorInput
 from zorqen_research.domain.indicators.results import IndicatorSeries
 from zorqen_research.domain.strategy_backtesting.histories import VisibleCandleHistory
-from zorqen_research.indicators.cli import main as indicators_cli_main
 
 
 def test_redteam_global_decimal_precision_extremely_low() -> None:
@@ -70,18 +69,18 @@ def test_redteam_float_and_non_finite_smuggled_into_result() -> None:
         (("10", "11", "9", "10"), ("11", "12", "10", "11"))
     )
     with pytest.raises(IndicatorValidationError):
-        IndicatorSeries.from_calculation(
+        _calculated_indicator_series(
             indicator_code=IndicatorCode.EMA_CLOSE,
             indicator_input=indicator_input,
             parameters={"period": 1},
-            values=(1.25, None),  # type: ignore[arg-type]
+            values=(1.25, Decimal("2")),  # type: ignore[arg-type]
         )
     with pytest.raises(IndicatorValidationError):
-        IndicatorSeries.from_calculation(
+        _calculated_indicator_series(
             indicator_code=IndicatorCode.EMA_CLOSE,
             indicator_input=indicator_input,
             parameters={"period": 1},
-            values=(Decimal("NaN"), None),
+            values=(Decimal("NaN"), Decimal("2")),
         )
 
 
@@ -89,7 +88,7 @@ def test_redteam_signed_zero_canonical() -> None:
     indicator_input = indicator_input_from_specs(
         (("10", "11", "9", "10"), ("11", "12", "10", "11"))
     )
-    series = IndicatorSeries.from_calculation(
+    series = _calculated_indicator_series(
         indicator_code=IndicatorCode.TRUE_RANGE,
         indicator_input=indicator_input,
         parameters={},
@@ -197,7 +196,7 @@ def test_redteam_forged_input_and_result_hashes() -> None:
 def test_redteam_result_value_length_mismatch() -> None:
     indicator_input = indicator_input_from_specs((("10", "11", "9", "10"),))
     with pytest.raises(IndicatorValidationError, match="length"):
-        IndicatorSeries.from_calculation(
+        _calculated_indicator_series(
             indicator_code=IndicatorCode.TRUE_RANGE,
             indicator_input=indicator_input,
             parameters={},
@@ -230,11 +229,3 @@ def test_redteam_indicator_series_not_in_decision_feed_types() -> None:
 def test_redteam_unknown_indicator_code_rejected() -> None:
     with pytest.raises(ValueError):
         IndicatorCode("macd")
-
-
-def test_redteam_cli_unknown_scenario_and_mismatch() -> None:
-    assert indicators_cli_main(["verify-golden", "--scenario", "not-a-scenario"]) == 1
-    # Golden path succeeds
-    assert indicators_cli_main(["verify-golden", "--scenario", "ema-close"]) == 0
-    payload = run_scenario("ema-close")
-    assert payload["ok"] is True

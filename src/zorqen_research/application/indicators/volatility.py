@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from zorqen_research.application.indicators.assembly import _calculated_indicator_series
 from zorqen_research.domain.indicators.enums import IndicatorCode
 from zorqen_research.domain.indicators.inputs import IndicatorInput
 from zorqen_research.domain.indicators.math_policy import (
@@ -38,7 +39,7 @@ def _true_range_values(indicator_input: IndicatorInput) -> tuple[Decimal, ...]:
 def true_range(indicator_input: IndicatorInput) -> IndicatorSeries:
     """Compute True Range for every candle (defined from index 0)."""
     tr_values = _true_range_values(indicator_input)
-    return IndicatorSeries.from_calculation(
+    return _calculated_indicator_series(
         indicator_code=IndicatorCode.TRUE_RANGE,
         indicator_input=indicator_input,
         parameters={},
@@ -73,7 +74,7 @@ def wilder_atr(indicator_input: IndicatorInput, period: object) -> IndicatorSeri
                 atr = (atr * period_minus_one + tr_values[index]) / period_dec
                 values[index] = atr
 
-    return IndicatorSeries.from_calculation(
+    return _calculated_indicator_series(
         indicator_code=IndicatorCode.WILDER_ATR,
         indicator_input=indicator_input,
         parameters={"period": period_i},

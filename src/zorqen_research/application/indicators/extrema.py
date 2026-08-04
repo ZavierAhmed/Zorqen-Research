@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from decimal import Decimal
 
+from zorqen_research.application.indicators.assembly import _calculated_indicator_series
 from zorqen_research.domain.indicators.enums import IndicatorCode
 from zorqen_research.domain.indicators.inputs import IndicatorInput
 from zorqen_research.domain.indicators.math_policy import (
@@ -111,7 +112,7 @@ def rolling_highest(indicator_input: IndicatorInput, period: object) -> Indicato
     period_i = require_period(period)
     highs = tuple(c.high for c in indicator_input.candles)
     values = _rolling_extrema(highs, period_i, want_max=True)
-    return IndicatorSeries.from_calculation(
+    return _calculated_indicator_series(
         indicator_code=IndicatorCode.ROLLING_HIGHEST,
         indicator_input=indicator_input,
         parameters={"period": period_i},
@@ -124,7 +125,7 @@ def rolling_lowest(indicator_input: IndicatorInput, period: object) -> Indicator
     period_i = require_period(period)
     lows = tuple(c.low for c in indicator_input.candles)
     values = _rolling_extrema(lows, period_i, want_max=False)
-    return IndicatorSeries.from_calculation(
+    return _calculated_indicator_series(
         indicator_code=IndicatorCode.ROLLING_LOWEST,
         indicator_input=indicator_input,
         parameters={"period": period_i},
@@ -137,7 +138,7 @@ def prior_rolling_highest(indicator_input: IndicatorInput, period: object) -> In
     period_i = require_period(period)
     highs = tuple(c.high for c in indicator_input.candles)
     values = _prior_extrema(highs, period_i, want_max=True)
-    return IndicatorSeries.from_calculation(
+    return _calculated_indicator_series(
         indicator_code=IndicatorCode.PRIOR_ROLLING_HIGHEST,
         indicator_input=indicator_input,
         parameters={"period": period_i},
@@ -150,7 +151,7 @@ def prior_rolling_lowest(indicator_input: IndicatorInput, period: object) -> Ind
     period_i = require_period(period)
     lows = tuple(c.low for c in indicator_input.candles)
     values = _prior_extrema(lows, period_i, want_max=False)
-    return IndicatorSeries.from_calculation(
+    return _calculated_indicator_series(
         indicator_code=IndicatorCode.PRIOR_ROLLING_LOWEST,
         indicator_input=indicator_input,
         parameters={"period": period_i},

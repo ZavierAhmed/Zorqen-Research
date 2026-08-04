@@ -44,7 +44,7 @@ def test_indicator_input_rejects_empty_tuple() -> None:
 
 def test_indicator_input_rejects_mutable_list() -> None:
     candles = list(candle_series((("10", "11", "9", "10"), ("11", "12", "10", "11"))))
-    with pytest.raises(IndicatorValidationError, match="immutable tuple"):
+    with pytest.raises(IndicatorValidationError, match="exact tuple"):
         IndicatorInput.from_verified(
             symbol=SYMBOL,
             timeframe=TIMEFRAME,
@@ -55,7 +55,7 @@ def test_indicator_input_rejects_mutable_list() -> None:
 def test_indicator_input_rejects_non_candle_item() -> None:
     candles = candle_series((("10", "11", "9", "10"), ("11", "12", "10", "11")))
     bad = (candles[0], "not-a-candle")  # type: ignore[assignment]
-    with pytest.raises(IndicatorValidationError, match="must be a Candle"):
+    with pytest.raises(IndicatorValidationError, match="exact Candle"):
         IndicatorInput.from_verified(symbol=SYMBOL, timeframe=TIMEFRAME, candles=bad)
 
 
