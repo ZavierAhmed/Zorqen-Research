@@ -164,6 +164,8 @@ def test_seeded_family_pairs_runtime_immutable() -> None:
 
 
 def test_huge_integer_and_deep_nesting_parser_boundary() -> None:
+    from zorqen_research.domain.strategy_definitions.identifiers import MAX_JSON_NESTING_DEPTH
+
     limit = sys.get_int_max_str_digits()
     digits = "1" + ("0" * limit)
     payload = f'{{"n":{digits}}}'.encode()
@@ -173,11 +175,19 @@ def test_huge_integer_and_deep_nesting_parser_boundary() -> None:
     assert "Traceback" not in str(huge_exc.value)
     assert "\\" not in str(huge_exc.value) or "C:" not in str(huge_exc.value)
 
-    deep = b"{" + (b'"a":{' * 5000) + b'"x":1' + (b"}" * 5000) + b"}"
+    # Explicit depth gate (not OS stack RecursionError) — regresses Ubuntu CI gap.
+    depth = MAX_JSON_NESTING_DEPTH  # innermost object depth = depth + 1
+    deep = b"{" + (b'"a":{' * depth) + b'"x":1' + (b"}" * depth) + b"}"
     assert len(deep) < (1 << 20)
-    with pytest.raises(StrategyDefinitionParseError) as nest_exc:
+    with pytest.raises(StrategyDefinitionParseError, match="nesting depth") as nest_exc:
         loads_strict_json(deep)
     assert "Traceback" not in str(nest_exc.value)
+
+    # Adversarial deep document under size limit still fails on Linux and Windows.
+    adversarial = b"{" + (b'"a":{' * 5000) + b'"x":1' + (b"}" * 5000) + b"}"
+    assert len(adversarial) < (1 << 20)
+    with pytest.raises(StrategyDefinitionParseError, match="nesting depth"):
+        loads_strict_json(adversarial)
 
 
 @pytest.mark.parametrize(

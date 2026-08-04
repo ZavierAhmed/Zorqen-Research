@@ -1,7 +1,7 @@
 # 0007 — Strategy Definition Requirement Traceability
 
-Milestone: **0.7 / 0.7A — Immutable Strategy Definition Schema + Integrity Boundaries**  
-Base commit (0.7A): `f66465e64594b6637e4ee25cd114dbe79d13e6ba`
+Milestone: **0.7 / 0.7A / 0.7B — Immutable Strategy Definition Schema + Integrity + Semantic Binding**  
+Base commit (0.7B): `27ce27840e98b5644ab9e5a2e33ab63542f22cd8`
 
 Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` · `NOT TESTED` · `NOT APPLICABLE`
 
@@ -60,10 +60,16 @@ Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` 
 | Test fixtures are draft-only | fixtures README + JSON | Fixture `status=draft`; `test_fixture_parses` | PROVEN BY AUTOMATED TEST |
 | Reuse PositionDirection / Timeframe | imports | Source inspection + model tests | VERIFIED BY SOURCE INSPECTION |
 | Exactly two family pairs | `SEEDED_FAMILY_PAIRS` | `test_seeded_family_pairs_runtime_immutable` | PROVEN BY AUTOMATED TEST |
+| Direct parameter-set construction cannot omit parameters | `validate_parameter_set_against_definition` | `test_direct_construction_missing_required_parameter`, `test_direct_construction_empty_against_non_empty_definition` | PROVEN BY AUTOMATED TEST |
+| Direct construction cannot introduce unknown parameters | same | `test_direct_construction_unknown_parameter` | PROVEN BY AUTOMATED TEST |
+| Direct construction cannot bypass kind/bound/step/enum validation | same + `validate_value` | `test_direct_construction_integer_as_string`, `test_direct_construction_boolean_as_integer`, `test_direct_construction_decimal_as_int_or_string`, `test_direct_construction_decimal_outside_bounds`, `test_direct_construction_decimal_step_misalignment`, `test_direct_construction_invalid_enum_value` | PROVEN BY AUTOMATED TEST |
+| Strategy instances revalidate parameter sets against definitions | `StrategyInstanceSpecification.__post_init__` | `test_tampered_parameter_set_cannot_form_instance`, `test_invalid_instance_rejected_before_instance_hash_exposed`, `test_valid_directly_constructed_parameter_set_succeeds` | PROVEN BY AUTOMATED TEST |
+| Parameterless definitions accept an empty parameter set | `validate_parameter_set_against_definition` | `test_parameterless_definition_accepts_empty_parameter_set` | PROVEN BY AUTOMATED TEST |
+| Ubuntu nesting failure root cause + regression | `MAX_JSON_NESTING_DEPTH` / `_enforce_max_json_nesting` | `test_huge_integer_and_deep_nesting_parser_boundary` | PROVEN BY AUTOMATED TEST |
 
 **Summary:** mandatory automated rows proven; remaining rows are explicit source-inspection checks. **NOT TESTED: 0.**
 
-## Red-team section (0.7 + 0.7A)
+## Red-team section (0.7 + 0.7A + 0.7B)
 
 | Attack attempted | Expected failure | Actual result | Test | Correction |
 |---|---|---|---|---|
@@ -88,9 +94,13 @@ Evidence classes: `PROVEN BY AUTOMATED TEST` · `VERIFIED BY SOURCE INSPECTION` 
 | Mutate seeded-family allowlist | TypeError | Failed as expected | `test_seeded_family_pairs_runtime_immutable` | MappingProxyType |
 | Insert third family | TypeError | Failed as expected | same | MappingProxyType |
 | Huge JSON integer | ParseError | Failed as expected | `test_huge_integer_and_deep_nesting_parser_boundary` | Catch `ValueError` |
-| Deep JSON nesting | ParseError | Failed as expected | same | Catch `RecursionError` |
+| Deep JSON nesting | ParseError | Failed as expected | same | Explicit `MAX_JSON_NESTING_DEPTH` walk (0.7B); residual `RecursionError` still sanitized |
 | Escaped lone Unicode surrogate | ParseError / ValidationError | Failed as expected | `test_lone_surrogate_*` | `require_unicode_scalars` |
 | Custom object pretending to equal enum choice | ValidationError | Failed as expected | `test_enum_rejects_custom_equality_object` | `type(value) is str` |
 | Serialization of every accepted model | Valid UTF-8 bytes | Passed | `test_every_accepted_model_serializes_utf8` | Canonical encode path |
+| Parameter set matching hash but omitting keys | ValidationError | Failed as expected | `test_tampered_parameter_set_cannot_form_instance` | `validate_parameter_set_against_definition` |
+| Direct empty set vs multi-parameter definition | ValidationError | Failed as expected | `test_direct_construction_empty_against_non_empty_definition` | same |
+| Wrong kinds via direct BoundParameterValue | ValidationError | Failed as expected | semantic binding kind/bound/enum tests | Schema revalidation on instance |
+| Ubuntu CI: depth-5000 nesting accepted on Linux | ParseError required | Reproduced; fixed | `test_huge_integer_and_deep_nesting_parser_boundary` | Platform-independent nesting gate |
 
 No remaining untested mandatory parser/constructor bypasses identified after the red-team loop.

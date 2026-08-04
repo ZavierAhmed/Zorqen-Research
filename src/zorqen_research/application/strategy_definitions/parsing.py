@@ -21,6 +21,7 @@ from zorqen_research.domain.strategy_definitions.errors import (
 )
 from zorqen_research.domain.strategy_definitions.identifiers import (
     MAX_JSON_BYTES,
+    MAX_JSON_NESTING_DEPTH,
     parse_uuid_string,
 )
 from zorqen_research.domain.strategy_definitions.parameters import (
@@ -47,6 +48,20 @@ def _object_pairs_hook(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise StrategyDefinitionParseError(msg)
         out[key] = value
     return out
+
+
+def _enforce_max_json_nesting(document: object, *, field: str) -> None:
+    """Reject documents deeper than MAX_JSON_NESTING_DEPTH (platform-independent)."""
+    stack: list[tuple[object, int]] = [(document, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > MAX_JSON_NESTING_DEPTH:
+            msg = f"{field} exceeds maximum JSON nesting depth"
+            raise StrategyDefinitionParseError(msg)
+        if isinstance(node, dict):
+            stack.extend((value, depth + 1) for value in node.values())
+        elif isinstance(node, list):
+            stack.extend((value, depth + 1) for value in node)
 
 
 def loads_strict_json(raw: bytes, *, field: str = "document") -> dict[str, Any]:
@@ -104,6 +119,7 @@ def loads_strict_json(raw: bytes, *, field: str = "document") -> dict[str, Any]:
     if text[end:].strip():
         msg = f"{field} contains trailing non-whitespace content"
         raise StrategyDefinitionParseError(msg)
+    _enforce_max_json_nesting(document, field=field)
     return document
 
 

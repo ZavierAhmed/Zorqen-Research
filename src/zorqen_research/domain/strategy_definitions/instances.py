@@ -113,10 +113,8 @@ class StrategyInstanceSpecification:
             if not isinstance(self.parameter_set, StrategyParameterSet):
                 msg = "parameter_set must be a StrategyParameterSet"
                 raise StrategyDefinitionValidationError(msg)
+            validate_parameter_set_against_definition(self.definition, self.parameter_set)
             definition_hash = hash_definition(self.definition)
-            if self.parameter_set.definition_hash != definition_hash:
-                msg = "parameter set definition_hash does not match definition"
-                raise StrategyDefinitionValidationError(msg)
             parameter_set_hash = self.parameter_set.parameter_set_hash
             instance_hash = hash_instance_components(
                 definition_hash=definition_hash,
@@ -134,6 +132,62 @@ class StrategyInstanceSpecification:
 
 def _default_for(param: StrategyParameterDefinition) -> Decimal | int | bool | str:
     return param.default_value
+
+
+def validate_parameter_set_against_definition(
+    definition: StrategyDefinition,
+    parameter_set: StrategyParameterSet,
+) -> None:
+    """
+    Revalidate a parameter set against a definition's schema and hashes.
+
+    Closes the bypass where a set shares ``definition_hash`` but omits, invents,
+    or mistypes parameters relative to the definition schema.
+    """
+    if not isinstance(definition, StrategyDefinition):
+        msg = "definition must be a StrategyDefinition"
+        raise StrategyDefinitionValidationError(msg)
+    if not isinstance(parameter_set, StrategyParameterSet):
+        msg = "parameter_set must be a StrategyParameterSet"
+        raise StrategyDefinitionValidationError(msg)
+
+    expected_hash = hash_definition(definition)
+    if parameter_set.definition_hash != expected_hash:
+        msg = "parameter set definition_hash does not match definition"
+        raise StrategyDefinitionValidationError(msg)
+
+    expected_keys = [param.key for param in definition.parameters]
+    provided_keys = [item.key for item in parameter_set.values]
+    expected_set = set(expected_keys)
+    provided_set = set(provided_keys)
+    missing = expected_set - provided_set
+    unknown = provided_set - expected_set
+    if missing:
+        msg = f"missing parameter keys: {sorted(missing)}"
+        raise StrategyDefinitionValidationError(msg)
+    if unknown:
+        msg = f"unknown parameter keys: {sorted(unknown)}"
+        raise StrategyDefinitionValidationError(msg)
+    if provided_keys != expected_keys:
+        msg = "parameter values must exactly match definition parameter keys in order"
+        raise StrategyDefinitionValidationError(msg)
+
+    by_key = {param.key: param for param in definition.parameters}
+    validated_values: list[tuple[str, Decimal | int | bool | str]] = []
+    for item in parameter_set.values:
+        validated = by_key[item.key].validate_value(item.value)
+        if validated != item.value:
+            msg = f"parameters.{item.key} does not match its validated value"
+            raise StrategyDefinitionValidationError(msg)
+        validated_values.append((item.key, validated))
+
+    recomputed = compute_parameter_set_hash(
+        definition_hash=parameter_set.definition_hash,
+        values=tuple(validated_values),
+    )
+    if recomputed != parameter_set.parameter_set_hash:
+        msg = "parameter_set_hash does not match validated parameter set content"
+        raise StrategyDefinitionValidationError(msg)
 
 
 def bind_parameter_values(

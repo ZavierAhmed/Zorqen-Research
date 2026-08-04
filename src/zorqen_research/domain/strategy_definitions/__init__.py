@@ -13,6 +13,7 @@ from zorqen_research.domain.strategy_definitions.instances import (
     StrategyParameterSet,
     bind_default_parameter_set,
     bind_parameter_values,
+    validate_parameter_set_against_definition,
 )
 from zorqen_research.domain.strategy_definitions.parameters import (
     BooleanParameterDefinition,
@@ -41,4 +42,5 @@ __all__ = [
     "TimeframeRequirement",
     "bind_default_parameter_set",
     "bind_parameter_values",
+    "validate_parameter_set_against_definition",
 ]
