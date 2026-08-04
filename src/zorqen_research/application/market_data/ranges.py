@@ -5,7 +5,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from zorqen_research.domain.timeframes import Timeframe, timeframe_duration
+from zorqen_research.domain.timeframes import (
+    Timeframe,
+    align_floor,
+    assert_aligned,
+    ensure_utc,
+    is_aligned,
+    timeframe_duration,
+)
+
+__all__ = [
+    "ImportRange",
+    "align_floor",
+    "assert_aligned",
+    "current_open_boundary",
+    "ensure_utc",
+    "estimate_candle_count",
+    "is_aligned",
+    "parse_import_range",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,54 +46,6 @@ class ImportRange:
             msg = "Import range length must be an exact multiple of the timeframe"
             raise ValueError(msg)
         return int(delta / step)
-
-
-def ensure_utc(value: datetime, *, field: str) -> datetime:
-    if value.tzinfo is None:
-        msg = f"{field} must be timezone-aware UTC"
-        raise ValueError(msg)
-    return value.astimezone(UTC)
-
-
-def align_floor(value: datetime, timeframe: Timeframe) -> datetime:
-    """Return the greatest timeframe-aligned instant <= value (UTC)."""
-    utc = ensure_utc(value, field="timestamp")
-    if timeframe in {
-        Timeframe.M1,
-        Timeframe.M3,
-        Timeframe.M5,
-        Timeframe.M15,
-        Timeframe.M30,
-        Timeframe.H1,
-        Timeframe.H4,
-    }:
-        minutes = int(timeframe_duration(timeframe).total_seconds() // 60)
-        total_minutes = utc.hour * 60 + utc.minute
-        floored = total_minutes - (total_minutes % minutes)
-        return utc.replace(
-            hour=floored // 60,
-            minute=floored % 60,
-            second=0,
-            microsecond=0,
-        )
-    if timeframe is Timeframe.D1:
-        return utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    # Monday 00:00 UTC for 1w
-    monday = utc - timedelta(days=utc.weekday())
-    return monday.replace(hour=0, minute=0, second=0, microsecond=0)
-
-
-def is_aligned(value: datetime, timeframe: Timeframe) -> bool:
-    utc = ensure_utc(value, field="timestamp")
-    return utc == align_floor(utc, timeframe)
-
-
-def assert_aligned(value: datetime, timeframe: Timeframe, *, field: str) -> datetime:
-    utc = ensure_utc(value, field=field)
-    if not is_aligned(utc, timeframe):
-        msg = f"{field} must align exactly to timeframe {timeframe.value}: {utc.isoformat()}"
-        raise ValueError(msg)
-    return utc
 
 
 def current_open_boundary(now: datetime, timeframe: Timeframe) -> datetime:

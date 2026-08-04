@@ -30,6 +30,7 @@ zorqen-worker = "zorqen_research.worker.__main__:main"
 zorqen-dataset = "zorqen_research.datasets.cli:main"
 zorqen-backtest = "zorqen_research.backtesting.cli:main"
 zorqen-strategy = "zorqen_research.strategies.cli:main"
+zorqen-timeframes = "zorqen_research.timeframes.cli:main"
 
 [build-system]
 requires = ["hatchling"]

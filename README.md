@@ -17,12 +17,16 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **0.1** established the executable repository foundation. Corrective milestone **0.1A** fixed frontend-to-API same-origin routing. Milestone **0.2** added the strategy-family registry and append-only audit trail. Milestone **0.3** / **0.3A** / **0.3B** added immutable artifacts and dataset manifests. Milestone **0.4** / **0.4A** / **0.4B** added public Binance futures candle import with strict candle and artifact-root invariants. Milestone **0.5** / **0.5A** added verified candle querying. Milestone **0.6** / **0.6A** / **0.6B** added the deterministic backtest kernel with frozen goldens and a sanitized provider boundary. Milestone **0.7** adds:
+Milestone **0.8** adds deterministic candle resampling and no-lookahead multi-timeframe alignment:
 
-- Immutable strategy-definition and parameter schemas (pure domain models)
-- Exact family ID/code binding to the two seeded families
-- Strict JSON parsing, canonical serialization, and deterministic hashes
-- Local `zorqen-strategy` validation CLI (no network/database/execution)
+- Exact integer-ratio timeframe derivation (`1m→5m`, `1d→1w`, …)
+- Strict complete-bucket resampling with exact Decimal OHLCV aggregation
+- Computed source/target candle hashes from canonical CSV bytes
+- Close-time context alignment with linear monotonic pointer
+- Frozen goldens via `zorqen-timeframes verify-golden`
+- **No strategy is implemented** (no Adaptive MTF / Support-Resistance rules, indicators, or provider factories)
+
+Earlier milestones cover repository foundation, registry/audit, artifacts/datasets, Binance import, verified candle query, deterministic backtest kernel, and immutable strategy-definition schemas.
 
 **Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, indicators, provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
@@ -45,6 +49,7 @@ src/zorqen_research/
   datasets/        Fixture + Binance import CLI (`zorqen-dataset`)
   backtesting/     Golden backtest CLI (`zorqen-backtest`)
   strategies/      Strategy-definition validation CLI (`zorqen-strategy`)
+  timeframes/      Resampling/alignment golden CLI (`zorqen-timeframes`)
   core/            Settings and logging
   infrastructure/  Database, local artifact store, Binance public client, repositories
   worker/          Worker entry point and idle service
@@ -269,6 +274,25 @@ uv run zorqen-strategy bind-parameters --definition tests/fixtures/strategy_defi
 ```
 
 Test fixtures under `tests/fixtures/strategy_definitions/` are draft-only and are **not** the Adaptive MTF or Support/Resistance production baselines.
+
+## Deterministic timeframe resampling (Milestone 0.8)
+
+Pure in-memory resampling and no-lookahead alignment (no database, network, or strategy execution).
+
+**Derivation:** source duration must be strictly finer than target, and target duration must be an exact integer multiple of source duration (millisecond arithmetic). Examples: `1m→5m`, `15m→1h`, `1d→1w`. Non-integral pairs such as `3m→5m` fail.
+
+**Complete-bucket policy:** the first source open must land on a canonical target boundary; source count must be divisible by the ratio; every child must open at `target_open + i × source_duration`. Leading/trailing partial buckets fail. Weekly buckets begin Monday `00:00:00 UTC`.
+
+**Aggregation:** open = first child open; high/low = max/min; close = last child close; volumes and trade counts sum exactly.
+
+**Alignment:** a context candle is available at an execution decision only when `context.close_time <= execution.close_time`. Multi-context inputs must be unique and ordered by increasing duration. Alignment is linear (monotonic pointer).
+
+```bash
+uv run zorqen-timeframes verify-golden --scenario all
+uv run zorqen-timeframes verify-golden --scenario one-minute-to-five-minute
+```
+
+No Adaptive MTF or Support/Resistance strategy logic is implemented in this milestone.
 
 ## Frontend API routing (same-origin default)
 
