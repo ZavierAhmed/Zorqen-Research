@@ -17,18 +17,20 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **0.9** adds a deterministic multi-timeframe backtest decision feed:
+Milestone **1.0** adds a pure deterministic indicator series foundation:
 
-- Factory-bound `MultiTimeframeBacktestInput` validated against strategy definitions
-- No-lookahead visible histories and per-bar decision views
-- Adapter into the existing unchanged `BacktestEngine`
-- `StrategyBacktestEnvelope` binding strategy/market-data/result identities
-- Frozen bridge goldens via `zorqen-backtest run-mtf-golden`
-- **No strategy algorithm is implemented** (no Adaptive MTF / Support-Resistance rules, indicators, or dynamic provider factories)
+- Factory-bound `IndicatorInput` and immutable `IndicatorSeries`
+- Fixed local Decimal math policy (`schema_version=1`, precision `50`, `ROUND_HALF_EVEN`)
+- Indicators: `ema_close`, `true_range`, `wilder_atr`, `rolling_highest`, `rolling_lowest`, `prior_rolling_highest`, `prior_rolling_lowest`
+- Warmup values are `None` (JSON `null`); defined values are finite `Decimal` only
+- Canonical compact JSON serialization and SHA-256 result hashing
+- Literal goldens via `zorqen-indicators verify-golden`
+- **No strategy signals**, no Adaptive MTF / Support-Resistance rules, no provider factories
+- **No provider integration:** complete offline series are not attached to decision contexts or feeds (bounded indicator views are deferred)
 
-Earlier milestones cover repository foundation, registry/audit, artifacts/datasets, Binance import, verified candle query, deterministic backtest kernel, immutable strategy-definition schemas, and timeframe resampling/alignment.
+Earlier milestones cover repository foundation, registry/audit, artifacts/datasets, Binance import, verified candle query, deterministic backtest kernel, immutable strategy-definition schemas, timeframe resampling/alignment, and the multi-timeframe decision feed.
 
-**Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, indicators, dynamic provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, provider-safe indicator views, dynamic provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -50,6 +52,7 @@ src/zorqen_research/
   backtesting/     Golden backtest CLI (`zorqen-backtest`)
   strategies/      Strategy-definition validation CLI (`zorqen-strategy`)
   timeframes/      Resampling/alignment golden CLI (`zorqen-timeframes`)
+  indicators/      Indicator golden CLI (`zorqen-indicators`)
   core/            Settings and logging
   infrastructure/  Database, local artifact store, Binance public client, repositories
   worker/          Worker entry point and idle service
@@ -312,6 +315,25 @@ uv run zorqen-backtest run-mtf-golden --scenario exact-close-readiness
 ```
 
 No Adaptive MTF or Support/Resistance strategy logic is implemented in this milestone.
+
+## Deterministic indicator series (Milestone 1.0)
+
+Pure offline indicator kernel (no database, network, strategy signals, or provider integration).
+
+**Supported indicators:** `ema_close`, `true_range`, `wilder_atr`, `rolling_highest`, `rolling_lowest`, `prior_rolling_highest`, `prior_rolling_lowest`.
+
+**Math policy:** fixed local Decimal context — `schema_version=1`, `decimal_precision=50`, `ROUND_HALF_EVEN`. Outputs are independent of the process-global Decimal context.
+
+**Warmup:** undefined slots are `None` / JSON `null`. Inclusive rolling windows include the current candle; prior-window extrema exclude it.
+
+**Safety boundary:** `IndicatorSeries` is a complete offline series and must not be passed directly to strategy providers. Provider-safe bounded indicator views are deferred.
+
+```bash
+uv run zorqen-indicators verify-golden --scenario all
+uv run zorqen-indicators verify-golden --scenario ema-close
+```
+
+No Adaptive MTF / Support-Resistance signals, ATR stops, breakout decisions, or provider adapters are implemented in this milestone.
 
 ## Frontend API routing (same-origin default)
 
