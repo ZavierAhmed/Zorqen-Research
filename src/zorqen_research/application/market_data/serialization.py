@@ -70,11 +70,12 @@ def serialize_candles_csv(candles: Sequence[Candle]) -> bytes:
 
 def serialize_resampling_metadata(series: object) -> bytes:
     """Canonical JSON metadata for a ResampledCandleSeries (no candle bodies)."""
+    from zorqen_research.domain.market_data.errors import ResamplingValidationError
     from zorqen_research.domain.market_data.series import ResampledCandleSeries
 
     if not isinstance(series, ResampledCandleSeries):
         msg = "series must be a ResampledCandleSeries"
-        raise TypeError(msg)
+        raise ResamplingValidationError(msg)
     document = {
         "ratio": series.ratio,
         "schema_version": CANONICAL_SCHEMA_VERSION,

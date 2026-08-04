@@ -134,7 +134,7 @@ class AlignmentGoldenExpectation:
     execution_count: int
     context_specs: tuple[tuple[Timeframe, int], ...]
     expected_mappings: tuple[tuple[int | None, ...], ...]
-    alignment_hash: str | None
+    alignment_hash: str
     execution_hash: str
     context_hashes: tuple[str, ...]
 
@@ -295,7 +295,8 @@ ALIGNMENT_GOLDENS: dict[str, AlignmentGoldenExpectation] = {
         execution_count=24,
         context_specs=((Timeframe.H4, 6),),
         expected_mappings=(_ALIGN_1H_4H_MAP,),
-        alignment_hash=None,
+        # Single-context hash binds schema/symbol/TFs/candle hashes/exact mapping.
+        alignment_hash="f8c8d2548fc6772ce421c9abb459efafd6e46aefd415dbf174406678f31d6698",
         execution_hash="12ad15d6cf957b337720019aa4766687fb643e163394b001621c5c0d38f96abd",
         context_hashes=("01382157594631837ea28d0feac14ff14a1eb20c25ee8968fbc898487a18cc83",),
     ),
@@ -305,7 +306,10 @@ ALIGNMENT_GOLDENS: dict[str, AlignmentGoldenExpectation] = {
         execution_count=24,
         context_specs=((Timeframe.H4, 6), (Timeframe.D1, 1)),
         expected_mappings=(_ALIGN_1H_4H_MAP, _ALIGN_1H_1D_MAP),
-        alignment_hash="30abad8971a01b39c3a8579e9929c42f56fc168b4694885834ab911c9b1f904e",
+        # Milestone 0.8A: multi hash now also binds ordered child alignment_hashes.
+        # Previous 0.8 value 30abad8971a01b39c3a8579e9929c42f56fc168b4694885834ab911c9b1f904e
+        # is intentionally replaced by this independently derived contract hash.
+        alignment_hash="1ced7609616bfc7e79039cd8ac9cbead378c7feffbeeec5db4bda3b7174f48ac",
         execution_hash="12ad15d6cf957b337720019aa4766687fb643e163394b001621c5c0d38f96abd",
         context_hashes=(
             "01382157594631837ea28d0feac14ff14a1eb20c25ee8968fbc898487a18cc83",
@@ -394,6 +398,15 @@ def run_alignment_scenario(name: str) -> dict[str, object]:
         if alignment.mapping != expectation.expected_mappings[0]:
             msg = f"{name}: mapping mismatch"
             raise TimeframeGoldenMismatchError(msg)
+        if alignment.execution_candle_sha256 != expectation.execution_hash:
+            msg = f"{name}: execution_hash mismatch"
+            raise TimeframeGoldenMismatchError(msg)
+        if alignment.context_candle_sha256 != expectation.context_hashes[0]:
+            msg = f"{name}: context_hash mismatch"
+            raise TimeframeGoldenMismatchError(msg)
+        if alignment.alignment_hash != expectation.alignment_hash:
+            msg = f"{name}: alignment_hash mismatch"
+            raise TimeframeGoldenMismatchError(msg)
         payload: dict[str, object] = {
             "ok": True,
             "scenario": name,
@@ -403,6 +416,7 @@ def run_alignment_scenario(name: str) -> dict[str, object]:
             "target_count": len(contexts[0][1]),
             "source_hash": expectation.execution_hash,
             "target_hash": expectation.context_hashes[0],
+            "alignment_hash": alignment.alignment_hash,
         }
         return payload
 

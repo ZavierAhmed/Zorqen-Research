@@ -17,12 +17,13 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **0.8** adds deterministic candle resampling and no-lookahead multi-timeframe alignment:
+Milestone **0.8 / 0.8A** adds deterministic candle resampling and no-lookahead multi-timeframe alignment:
 
 - Exact integer-ratio timeframe derivation (`1m→5m`, `1d→1w`, …)
 - Strict complete-bucket resampling with exact Decimal OHLCV aggregation
 - Computed source/target candle hashes from canonical CSV bytes
 - Close-time context alignment with linear monotonic pointer
+- Factory-bound results: no forged metadata, caller-supplied hashes, or arbitrary mappings (0.8A)
 - Frozen goldens via `zorqen-timeframes verify-golden`
 - **No strategy is implemented** (no Adaptive MTF / Support-Resistance rules, indicators, or provider factories)
 
@@ -275,7 +276,7 @@ uv run zorqen-strategy bind-parameters --definition tests/fixtures/strategy_defi
 
 Test fixtures under `tests/fixtures/strategy_definitions/` are draft-only and are **not** the Adaptive MTF or Support/Resistance production baselines.
 
-## Deterministic timeframe resampling (Milestone 0.8)
+## Deterministic timeframe resampling (Milestone 0.8 / 0.8A)
 
 Pure in-memory resampling and no-lookahead alignment (no database, network, or strategy execution).
 
@@ -286,6 +287,8 @@ Pure in-memory resampling and no-lookahead alignment (no database, network, or s
 **Aggregation:** open = first child open; high/low = max/min; close = last child close; volumes and trade counts sum exactly.
 
 **Alignment:** a context candle is available at an execution decision only when `context.close_time <= execution.close_time`. Multi-context inputs must be unique and ordered by increasing duration. Alignment is linear (monotonic pointer).
+
+**Result integrity (0.8A):** resampled series and alignment objects are factory-controlled. Counts, bounds, candle hashes, mappings, and alignment hashes are computed from verified candle tuples — callers cannot supply forged metadata or arbitrary mappings.
 
 ```bash
 uv run zorqen-timeframes verify-golden --scenario all

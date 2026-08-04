@@ -9,7 +9,6 @@ import pytest
 from zorqen_research.application.market_data.alignment import (
     align_execution_to_context,
     align_execution_to_contexts,
-    hash_candles,
 )
 from zorqen_research.application.market_data.goldens import build_source_series
 from zorqen_research.domain.market_data.alignment import (
@@ -85,7 +84,7 @@ def test_symbol_same_tf_finer_duplicate_unsorted() -> None:
                 (Timeframe.H4, build_source_series(start=START, timeframe=Timeframe.H4, count=6)),
             ),
         )
-    from zorqen_research.domain.market_data.alignment import ContextAlignment, MultiContextAlignment
+    from zorqen_research.domain.market_data.alignment import MultiContextAlignment
 
     good = align_execution_to_context(
         symbol=SYM,
@@ -94,21 +93,15 @@ def test_symbol_same_tf_finer_duplicate_unsorted() -> None:
         execution_candles=execution,
         context_candles=context,
     )
-    foreign = ContextAlignment(
+    foreign = align_execution_to_context(
         symbol=Symbol(value="ETHUSDT"),
-        execution_timeframe=good.execution_timeframe,
-        context_timeframe=good.context_timeframe,
-        execution_candle_sha256=good.execution_candle_sha256,
-        context_candle_sha256=good.context_candle_sha256,
-        mapping=good.mapping,
+        execution_timeframe=Timeframe.H1,
+        context_timeframe=Timeframe.H4,
+        execution_candles=execution,
+        context_candles=context,
     )
     with pytest.raises(AlignmentValidationError, match="symbol"):
-        MultiContextAlignment(
-            symbol=SYM,
-            execution_timeframe=Timeframe.H1,
-            execution_candle_sha256=good.execution_candle_sha256,
-            alignments=(foreign,),
-        )
+        MultiContextAlignment.from_alignments((good, foreign))
 
 
 def test_mapping_monotonic_and_linear() -> None:
@@ -132,8 +125,6 @@ def test_mapping_monotonic_and_linear() -> None:
         context_timeframe=Timeframe.H4,
         execution_candles=execution,
         context_candles=CountingSequence(context),
-        execution_candle_sha256=hash_candles(execution),
-        context_candle_sha256=hash_candles(context),
     )
     assert counted.mapping == alignment.mapping
     assert reads <= len(execution) + len(context)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from zorqen_research.application.market_data.serialization import serialize_candles_csv
 from zorqen_research.domain.candles import Candle
 from zorqen_research.domain.market_data.derivation import (
     TimeframeDerivationPlan,
@@ -27,7 +26,6 @@ def resample(
         candles,
         symbol=symbol,
         plan=plan,
-        serialize_csv=serialize_candles_csv,
         expected_source_sha256=expected_source_sha256,
     )
 
@@ -43,6 +41,5 @@ def resample_with_plan(
         candles,
         symbol=symbol,
         plan=plan,
-        serialize_csv=serialize_candles_csv,
         expected_source_sha256=expected_source_sha256,
     )

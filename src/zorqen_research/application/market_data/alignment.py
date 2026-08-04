@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from zorqen_research.application.market_data.serialization import serialize_candles_csv
-from zorqen_research.domain.artifacts import sha256_hex
 from zorqen_research.domain.candles import Candle
 from zorqen_research.domain.market_data.alignment import (
     ContextAlignment,
@@ -13,12 +11,13 @@ from zorqen_research.domain.market_data.alignment import (
     align_context_to_execution,
     align_multi_context,
 )
+from zorqen_research.domain.market_data.hashes import hash_candle_tuple
 from zorqen_research.domain.symbols import Symbol
 from zorqen_research.domain.timeframes import Timeframe
 
 
 def hash_candles(candles: tuple[Candle, ...]) -> str:
-    return sha256_hex(serialize_candles_csv(candles))
+    return hash_candle_tuple(candles)
 
 
 def align_execution_to_context(
@@ -35,8 +34,6 @@ def align_execution_to_context(
         context_timeframe=context_timeframe,
         execution_candles=execution_candles,
         context_candles=context_candles,
-        execution_candle_sha256=hash_candles(execution_candles),
-        context_candle_sha256=hash_candles(context_candles),
     )
 
 
@@ -48,13 +45,9 @@ def align_execution_to_contexts(
     context_series: Sequence[tuple[Timeframe, tuple[Candle, ...]]],
 ) -> MultiContextAlignment:
     """Align contexts. Caller must supply unique contexts ordered by increasing duration."""
-    contexts = tuple(
-        (timeframe, candles, hash_candles(candles)) for timeframe, candles in context_series
-    )
     return align_multi_context(
         symbol=symbol,
         execution_timeframe=execution_timeframe,
         execution_candles=execution_candles,
-        execution_candle_sha256=hash_candles(execution_candles),
-        contexts=contexts,
+        contexts=context_series,
     )

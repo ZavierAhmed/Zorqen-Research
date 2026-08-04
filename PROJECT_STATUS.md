@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.7B): `1ff0ea988a92b0c385912325d92b6b075b635e6b`
-- Milestone 0.8 base commit: `1ff0ea988a92b0c385912325d92b6b075b635e6b`
+- Previous verified commit (Milestone 0.8): `06951980cb1832c3c2a7e11d84675e741609c5b9`
+- Milestone 0.8A base commit: `06951980cb1832c3c2a7e11d84675e741609c5b9`
 - Milestone result commit: current HEAD containing this status update (exact SHA after commit).
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
 - Current environment: Windows development laptop
@@ -23,19 +23,19 @@ Unchanged. Research qualification only; no account/trading APIs.
 
 ## 3. Initial Strategy Scope
 
-Family metadata remains seeded. Milestone 0.8 adds pure resampling/alignment only — no executable strategy algorithms.
+Family metadata remains seeded. Milestone 0.8A binds resampling/alignment integrity only — no executable strategy algorithms.
 
 ## 4. Current Milestone
 
-- Milestone: `0.8` — Deterministic Candle Resampling and Multi-Timeframe Alignment
+- Milestone: `0.8A` — Bind Resampling and Alignment Results to Verified Candle Content
 - Status: Complete pending independent review and all four GitHub checks green after push
-- Base: `1ff0ea988a92b0c385912325d92b6b075b635e6b`
+- Base: `06951980cb1832c3c2a7e11d84675e741609c5b9`
 - Work completed:
-  - Exact timeframe derivation plans (`TimeframeDerivationPlan`)
-  - Strict complete-bucket resampling + immutable `ResampledCandleSeries`
-  - No-lookahead single/multi context alignment + alignment hash
-  - Frozen goldens + `zorqen-timeframes verify-golden` CLI
-  - ADR 0008 + traceability 0008 (0 NOT TESTED)
+  - Factory-only `ResampledCandleSeries` with computed source/target metadata and hashes
+  - Public alignment APIs compute candle hashes; reject caller-supplied hashes
+  - Mapping recomputed and bound to close times; factory-only `ContextAlignment` / `MultiContextAlignment`
+  - Frozen single-context alignment hash; multi hash updated for child alignment binding
+  - Traceability 0008 updated (0 NOT TESTED)
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
@@ -63,7 +63,7 @@ b342b5be8e4943a1bf82abbe26e3329424447515062df4e728154e47dea71c7d
 Example strategy definition hash (unchanged):
 `eb98cec1aa7c862514fa3fca8878769b38a28fa98d96b4c9bb49d41b51dc08f4`
 
-Frozen resampling target hashes:
+Frozen resampling target hashes (unchanged):
 
 ```text
 1m→5m:  56c28d9a685c7e36ea8c0c511ec41630bf58d567c00f7f99f3d3e8ad68f8db94
@@ -74,8 +74,13 @@ Frozen resampling target hashes:
 1d→1w:  522ca23a8e8b5b400dd78de03a396421af980f5a91bff06085c751634b743a80
 ```
 
-Multi-context alignment hash (`1h` + `4h`/`1d`):
-`30abad8971a01b39c3a8579e9929c42f56fc168b4694885834ab911c9b1f904e`
+Single-context alignment hash (`1h` + `4h`):
+`f8c8d2548fc6772ce421c9abb459efafd6e46aefd415dbf174406678f31d6698`
+
+Multi-context alignment hash (`1h` + `4h`/`1d`) — 0.8A contract includes child alignment hashes:
+`1ced7609616bfc7e79039cd8ac9cbead378c7feffbeeec5db4bda3b7174f48ac`
+
+(Previous 0.8 multi hash `30abad8971a01b39c3a8579e9929c42f56fc168b4694885834ab911c9b1f904e` intentionally replaced.)
 
 ## 6–8. Product / Architecture / Research Engine
 
@@ -83,20 +88,20 @@ No strategy algorithms, indicators, provider/backtest context wiring, definition
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 0.8 and confirmation that all four GitHub checks are green after push.
+Awaiting independent review of Milestone 0.8A and confirmation that all four GitHub checks are green after push.
 
-## 10. Verification Evidence (Milestone 0.8)
+## 10. Verification Evidence (Milestone 0.8A)
 
 Commands actually executed:
 
 ```text
 uv sync --frozen --all-extras
 uv run ruff check .                                            # All checks passed
-uv run ruff format --check .                                   # 193 files already formatted
-uv run mypy src                                                # Success: 116 source files
+uv run ruff format --check .                                   # 195 files already formatted
+uv run mypy src                                                # Success: 117 source files
 uv run pytest tests/unit -k "resampl or alignment or timeframe" -q
-                                                               # 51 passed, 392 deselected
-uv run pytest tests/unit -q                                    # 443 passed
+                                                               # 71 passed, 392 deselected
+uv run pytest tests/unit -q                                    # 463 passed (Win + Linux)
 uv run pytest tests/integration/test_artifact_filesystem.py -q # 9 passed
 uv run pytest tests/integration -q -m integration              # 34 passed
 uv run pytest tests/integration/test_candle_query.py -q        # 5 passed
@@ -106,7 +111,7 @@ uv run zorqen-timeframes verify-golden --scenario all          # twice, byte-ide
 uv run python -m zorqen_research.worker --check                # PostgreSQL reachable
 frontend npm ci / lint / test --run / build                    # eslint ok; 15 passed; build ok
 docker compose build + up; nginx live/ready/families/datasets  # 200; fixture hash preserved
-Linux container (node:22-bookworm): quality.yml sequence       # ruff/mypy; 443 unit; frontend 15 + build
+Linux container (node:22-bookworm): quality.yml sequence       # ruff/mypy; 463 unit; frontend 15 + build
 ```
 
 Traceability: `docs/verification/0008-timeframe-resampling-traceability.md` — **NOT TESTED: 0**
@@ -121,4 +126,4 @@ GitHub Actions: unknown until push.
 
 ## 12. Next Authorized Work
 
-None until Milestone 0.8 is independently accepted. Milestone 0.9 is not authorized.
+None until Milestone 0.8A is independently accepted. Milestone 0.9 is not authorized.
