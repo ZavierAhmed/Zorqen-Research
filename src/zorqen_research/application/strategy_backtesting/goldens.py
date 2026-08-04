@@ -16,6 +16,7 @@ from zorqen_research.application.market_data.goldens import build_source_series,
 from zorqen_research.application.strategy_backtesting.feed import MultiTimeframeDecisionFeed
 from zorqen_research.application.strategy_backtesting.provider import (
     MultiTimeframeBacktestDecisionContext,
+    MultiTimeframeDecisionProvider,
 )
 from zorqen_research.application.strategy_backtesting.runner import MultiTimeframeBacktestRunner
 from zorqen_research.application.strategy_definitions.serialization import build_instance
@@ -27,6 +28,7 @@ from zorqen_research.domain.backtesting.errors import (
 from zorqen_research.domain.backtesting.intents import BacktestIntent, EnterIntent
 from zorqen_research.domain.backtesting.policy import BacktestPolicy
 from zorqen_research.domain.candles import Candle
+from zorqen_research.domain.strategy_backtesting.errors import StrategyBacktestValidationError
 from zorqen_research.domain.strategy_backtesting.inputs import MultiTimeframeBacktestInput
 from zorqen_research.domain.strategy_backtesting.results import StrategyBacktestEnvelope
 from zorqen_research.domain.strategy_definitions.definitions import StrategyDefinition
@@ -109,6 +111,118 @@ class ScriptedMtfProvider:
         return ()
 
 
+_FORBIDDEN_HISTORY_ATTRS = (
+    "source_object",
+    "candles",
+    "source",
+    "to_tuple",
+    "full",
+    "all",
+    "as_tuple",
+    "to_list",
+)
+
+
+class NoLookaheadProbeProvider:
+    """
+    Test-only provider that actively probes public future-access paths.
+
+    Not a production strategy provider.
+    """
+
+    def __init__(
+        self,
+        *,
+        first_ready_intent: tuple[BacktestIntent, ...],
+        expected_execution_visible: int,
+        expected_context_visible: tuple[int, ...],
+        full_execution: tuple[Candle, ...],
+        full_contexts: tuple[tuple[Candle, ...], ...],
+    ) -> None:
+        self._first_ready = first_ready_intent
+        self._expected_execution_visible = expected_execution_visible
+        self._expected_context_visible = expected_context_visible
+        self._full_execution = full_execution
+        self._full_contexts = full_contexts
+        self._emitted_first = False
+        self.calls: list[int] = []
+        self.probe_ok = False
+        self.public_source_exposed = False
+
+    def on_bar_close(
+        self,
+        context: MultiTimeframeBacktestDecisionContext,
+    ) -> tuple[BacktestIntent, ...]:
+        self.calls.append(context.view.execution_bar_index)
+        view = context.view
+        execution_visible = len(view.execution_history)
+        self._probe_history(
+            view.execution_history,
+            full_series=self._full_execution,
+            visible_count=execution_visible,
+        )
+        if len(view.contexts) != len(self._full_contexts):
+            msg = "context view count mismatch during no-lookahead probe"
+            raise StrategyBacktestValidationError(msg)
+        for item, series in zip(view.contexts, self._full_contexts, strict=True):
+            self._probe_history(
+                item.history,
+                full_series=series,
+                visible_count=item.visible_count,
+            )
+        if not self._emitted_first:
+            if execution_visible != self._expected_execution_visible:
+                msg = "execution visible count mismatch at first ready bar"
+                raise StrategyBacktestValidationError(msg)
+            actual_context_visible = tuple(item.visible_count for item in view.contexts)
+            if actual_context_visible != self._expected_context_visible:
+                msg = "context visible counts mismatch at first ready bar"
+                raise StrategyBacktestValidationError(msg)
+            self.probe_ok = True
+            self._emitted_first = True
+            return self._first_ready
+        return ()
+
+    def _probe_history(
+        self,
+        history: object,
+        *,
+        full_series: tuple[Candle, ...],
+        visible_count: int,
+    ) -> None:
+        for name in _FORBIDDEN_HISTORY_ATTRS:
+            if hasattr(history, name):
+                self.public_source_exposed = True
+                msg = f"public history attribute exposes source: {name}"
+                raise StrategyBacktestValidationError(msg)
+        if len(history) != visible_count:  # type: ignore[arg-type]
+            msg = "visible history length mismatch during no-lookahead probe"
+            raise StrategyBacktestValidationError(msg)
+        try:
+            _ = history[visible_count]  # type: ignore[index]
+        except IndexError:
+            pass
+        else:
+            msg = "history indexing beyond visible boundary succeeded"
+            raise StrategyBacktestValidationError(msg)
+        wide = history[0:1_000_000]  # type: ignore[index]
+        if wide != full_series[:visible_count]:
+            msg = "wide slice leaked non-visible candles"
+            raise StrategyBacktestValidationError(msg)
+        iterated: tuple[Candle, ...] = tuple(history)  # type: ignore[arg-type]
+        if iterated != full_series[:visible_count]:
+            msg = "iteration leaked non-visible candles"
+            raise StrategyBacktestValidationError(msg)
+        if visible_count > 0:
+            try:
+                _ = history[-(visible_count + 1)]  # type: ignore[index]
+            except IndexError:
+                pass
+            else:
+                msg = "negative indexing crossed the visible boundary"
+                raise StrategyBacktestValidationError(msg)
+
+
 @dataclass(frozen=True, slots=True)
 class MtfGoldenExpectation:
     scenario: str
@@ -163,7 +277,7 @@ def _run_envelope(
     definition: StrategyDefinition,
     execution: tuple[Candle, ...],
     contexts: tuple[tuple[Timeframe, tuple[Candle, ...]], ...],
-    provider: ScriptedMtfProvider,
+    provider: MultiTimeframeDecisionProvider,
     policy: BacktestPolicy | None = None,
     signal_strength: int = 1,
 ) -> tuple[MultiTimeframeBacktestInput, StrategyBacktestEnvelope]:
@@ -319,6 +433,21 @@ MTF_GOLDENS: dict[str, MtfGoldenExpectation] = {
         altered_context_hash="7c164b94a2d9b99a75b34979f13fc90b64b6efd6dd76afc9957d3e98d6ec9214",
         altered_bundle_hash="1a107a395a4d45408ae6bd90699539e9b1faec6f92838434560c839c101a78d9",
         altered_envelope_hash="3e20e4bcc1286dbc788c450ae83e843571d79a1908bdbc8488a925338c7ebcbb",
+    ),
+    # Same logical identities as exact-close-readiness; probe provider only.
+    "no-lookahead-probe": MtfGoldenExpectation(
+        scenario="no-lookahead-probe",
+        strategy_instance_hash="4787e5aed25fc47e1d1d1068de1beb919b94d809f2cb2b7d604625641db324d1",
+        input_bundle_hash="1ef63eff5e42d00d2d3edabbc849a3f1f651929c3ba52abbc08fd64497794167",
+        execution_candle_hash="43077aac3637c792ac96df9c2441d08b9a5af09b861b0318d8e60a152aead315",
+        alignment_hash="7fb35c893491d96770e2e2beb3c8082bfe74b6c3389db3f4a6ea990a78700a7a",
+        backtest_result_hash="966418dd3fb45a8695b171d4cfca92029f94dd7cb208178761002d62f65a0b19",
+        envelope_hash="8e5259d68e152ee3c1b0767ec372866ddcbb8b67eeae96175345e2512879b70d",
+        provider_invocation_count=5,
+        warmup_skipped_count=3,
+        closed_trade_count=1,
+        first_ready_index=3,
+        context_visible_counts_at_ready=(1,),
     ),
 }
 
@@ -585,6 +714,46 @@ def run_context_sensitivity() -> dict[str, object]:
     }
 
 
+def run_no_lookahead_probe() -> dict[str, object]:
+    expectation = MTF_GOLDENS["no-lookahead-probe"]
+    definition = mtf_definition(
+        execution_warmup=4,
+        contexts=(TimeframeRequirement(timeframe=Timeframe.H4, warmup_bars=1),),
+        definition_code="mtf_exact_close",
+    )
+    execution = build_source_series(start=START, timeframe=Timeframe.H1, count=8)
+    context = build_source_series(start=START, timeframe=Timeframe.H4, count=2)
+    intent = _enter_long(decision_open=execution[3].open_time, intent_id="mtf-exact-close")
+    provider = NoLookaheadProbeProvider(
+        first_ready_intent=(intent,),
+        expected_execution_visible=4,
+        expected_context_visible=(1,),
+        full_execution=execution,
+        full_contexts=(context,),
+    )
+    bundle, envelope = _run_envelope(
+        definition=definition,
+        execution=execution,
+        contexts=((Timeframe.H4, context),),
+        provider=provider,
+    )
+    if provider.calls[0] != expectation.first_ready_index:
+        msg = "no-lookahead-probe: provider first call index mismatch"
+        raise MtfGoldenMismatchError(msg)
+    if not provider.probe_ok:
+        msg = "no-lookahead-probe: probe did not complete successfully"
+        raise MtfGoldenMismatchError(msg)
+    if provider.public_source_exposed:
+        msg = "no-lookahead-probe: public source exposure detected"
+        raise MtfGoldenMismatchError(msg)
+    payload = _assert_envelope(expectation, bundle, envelope)
+    payload["first_ready_index"] = expectation.first_ready_index
+    payload["execution_visible_at_ready"] = 4
+    payload["context_visible_at_ready"] = expectation.context_visible_counts_at_ready
+    payload["public_source_exposed"] = False
+    return payload
+
+
 def run_mtf_scenario(name: str) -> dict[str, object]:
     if name == "exact-close-readiness":
         return run_exact_close_readiness()
@@ -596,4 +765,6 @@ def run_mtf_scenario(name: str) -> dict[str, object]:
         return run_direction_restriction()
     if name == "context-sensitivity":
         return run_context_sensitivity()
+    if name == "no-lookahead-probe":
+        return run_no_lookahead_probe()
     raise KeyError(name)

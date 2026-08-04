@@ -35,8 +35,8 @@ from zorqen_research.domain.strategy_backtesting.decision_views import (
 )
 from zorqen_research.domain.strategy_backtesting.errors import StrategyBacktestValidationError
 from zorqen_research.domain.strategy_backtesting.histories import (
-    VerifiedHistorySource,
     VisibleCandleHistory,
+    _VerifiedHistorySource,
 )
 from zorqen_research.domain.strategy_backtesting.inputs import MultiTimeframeBacktestInput
 from zorqen_research.domain.strategy_backtesting.results import StrategyBacktestEnvelope
@@ -249,10 +249,12 @@ def test_envelope_runner_output_remains_deterministic() -> None:
 
 def test_views_reject_caller_supplied_hashes_and_forged_factories() -> None:
     assert not hasattr(ContextDecisionView, "from_alignment")
+    assert not hasattr(ContextDecisionView, "from_context_series")
     assert not hasattr(MultiTimeframeDecisionView, "from_parts")
-    with pytest.raises(StrategyBacktestValidationError, match="from_context_series"):
+    assert not hasattr(MultiTimeframeDecisionView, "from_bundle")
+    with pytest.raises(StrategyBacktestValidationError, match="view_at"):
         ContextDecisionView()
-    with pytest.raises(StrategyBacktestValidationError, match="from_bundle"):
+    with pytest.raises(StrategyBacktestValidationError, match="view_at"):
         MultiTimeframeDecisionView()
 
     bundle = _bundle(definition_code="mtf_09a_views")
@@ -261,29 +263,6 @@ def test_views_reject_caller_supplied_hashes_and_forged_factories() -> None:
     assert view.input_bundle_hash == bundle.input_bundle_hash
     assert view.contexts[0].context_candle_sha256 == bundle.contexts[0].candle_sha256
     assert view.contexts[0].alignment_hash == bundle.contexts[0].alignment.alignment_hash
-
-    with pytest.raises(TypeError):
-        ContextDecisionView.from_context_series(  # type: ignore[call-arg]
-            context=bundle.contexts[0],
-            history=view.contexts[0].history,
-            latest_closed_index=0,
-            context_candle_sha256="ff" * 32,
-        )
-    with pytest.raises(TypeError):
-        ContextDecisionView.from_context_series(  # type: ignore[call-arg]
-            context=bundle.contexts[0],
-            history=view.contexts[0].history,
-            latest_closed_index=0,
-            alignment_hash="ee" * 32,
-        )
-    with pytest.raises(TypeError):
-        MultiTimeframeDecisionView.from_bundle(  # type: ignore[call-arg]
-            bundle=bundle,
-            execution_bar_index=3,
-            execution_history=view.execution_history,
-            contexts=view.contexts,
-            input_bundle_hash="dd" * 32,
-        )
 
 
 def test_adapter_identities_only_from_feed_and_base_checks() -> None:
@@ -339,15 +318,15 @@ def test_adapter_identities_only_from_feed_and_base_checks() -> None:
 def test_visible_history_constant_time_construction() -> None:
     candles = build_source_series(start=START, timeframe=Timeframe.H1, count=100_001)
     instrumented = InstrumentedCandles(candles)
-    source = VerifiedHistorySource.bind_trusted(candles)
+    source = _VerifiedHistorySource._bind_trusted(candles)
     object.__setattr__(source, "_candles", instrumented)
 
     baseline_access = instrumented.access_count
     baseline_slice = instrumented.slice_count
-    near_ten = VisibleCandleHistory.from_verified_source(source, end_exclusive=11)
+    near_ten = VisibleCandleHistory._from_verified_source(source, end_exclusive=11)
     after_ten_access = instrumented.access_count
     after_ten_slice = instrumented.slice_count
-    near_hundred_k = VisibleCandleHistory.from_verified_source(source, end_exclusive=100_001)
+    near_hundred_k = VisibleCandleHistory._from_verified_source(source, end_exclusive=100_001)
     after_large_access = instrumented.access_count
     after_large_slice = instrumented.slice_count
 
@@ -356,23 +335,22 @@ def test_visible_history_constant_time_construction() -> None:
     ten_delta = after_ten_access - baseline_access
     large_delta = after_large_access - after_ten_access
     assert ten_delta == large_delta
-    assert near_ten.source_object is instrumented
-    assert near_hundred_k.source_object is instrumented
-    assert near_ten.source_object is near_hundred_k.source_object
+    # Private field inspection only — no public source-exposure API.
+    assert near_ten._source is instrumented
+    assert near_hundred_k._source is instrumented
+    assert near_ten._source is near_hundred_k._source
 
     # Iteration still yields exactly the visible candles.
     assert tuple(near_ten) == candles[:11]
     assert len(near_ten) == 11
-    assert isinstance(near_ten.source_object, InstrumentedCandles)
 
-    # Feed view_at also stays constant-time in source slice accesses.
+    # Feed view_at shares the exact bundle series (private field inspection only).
     definition = mtf_definition(
         execution_warmup=4,
         contexts=(TimeframeRequirement(timeframe=Timeframe.H4, warmup_bars=1),),
         definition_code="mtf_09a_perf",
     )
     instance = build_instance(definition, {"signal_strength": 1})
-    # Use a smaller but still large execution series for feed readiness with H4 context.
     exec_n = 10_000
     execution = build_source_series(start=START, timeframe=Timeframe.H1, count=exec_n)
     context = build_source_series(start=START, timeframe=Timeframe.H4, count=exec_n // 4)
@@ -383,23 +361,16 @@ def test_visible_history_constant_time_construction() -> None:
         context_series=((Timeframe.H4, context),),
     )
     feed = MultiTimeframeDecisionFeed.from_input(bundle)
-    exec_instrumented = InstrumentedCandles(execution)
-    object.__setattr__(feed._execution_source, "_candles", exec_instrumented)
-
-    feed.view_at(10)
-    access_a = exec_instrumented.access_count
-    slice_a = exec_instrumented.slice_count
-    feed.view_at(9_999)
-    access_b = exec_instrumented.access_count
-    slice_b = exec_instrumented.slice_count
-    assert slice_a == 0
-    assert slice_b == 0
-    # Two view_at calls should add the same number of accesses each (constant).
-    first_cost = access_a
-    second_cost = access_b - access_a
-    assert first_cost == second_cost
-    assert feed.view_at(10).execution_history.source_object is exec_instrumented
-    assert feed.view_at(9_999).execution_history.source_object is exec_instrumented
+    view_a = feed.view_at(10)
+    view_b = feed.view_at(9_999)
+    assert view_a.execution_history._source is bundle.execution_candles
+    assert view_b.execution_history._source is bundle.execution_candles
+    assert view_a.execution_history._source is view_b.execution_history._source
+    assert view_a.execution_history._source is feed._execution_source._candles
+    assert not hasattr(view_a.execution_history, "source_object")
+    assert not hasattr(view_a.execution_history, "candles")
+    assert len(view_a.execution_history) == 11
+    assert len(view_b.execution_history) == 10_000
 
 
 def test_provider_exact_tuple_contract() -> None:
