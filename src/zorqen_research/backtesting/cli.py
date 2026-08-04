@@ -14,6 +14,11 @@ from zorqen_research.application.strategy_backtesting.goldens import (
     MtfGoldenMismatchError,
     run_mtf_scenario,
 )
+from zorqen_research.application.strategy_backtesting.indicator_goldens import (
+    ALL_MTF_INDICATOR_SCENARIO_NAMES,
+    MtfIndicatorGoldenMismatchError,
+    run_mtf_indicator_scenario,
+)
 
 
 def _emit(payload: dict[str, object], *, ok: bool) -> int:
@@ -69,6 +74,23 @@ def _run_mtf_one(name: str) -> tuple[bool, dict[str, object]]:
     return True, payload
 
 
+def _run_mtf_indicator_one(name: str) -> tuple[bool, dict[str, object]]:
+    try:
+        payload = run_mtf_indicator_scenario(name)
+    except KeyError:
+        return False, {"ok": False, "scenario": name, "error": "unknown_scenario"}
+    except MtfIndicatorGoldenMismatchError as exc:
+        return False, {
+            "ok": False,
+            "scenario": name,
+            "error": "golden_mismatch",
+            "detail": str(exc),
+        }
+    except Exception as exc:  # noqa: BLE001 — CLI boundary
+        return False, {"ok": False, "scenario": name, "error": str(exc)}
+    return True, payload
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="zorqen-backtest",
@@ -82,6 +104,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Run one or all multi-timeframe bridge golden scenarios",
     )
     mtf.add_argument("--scenario", required=True, help="Scenario name or 'all'")
+    mtf_ind = sub.add_parser(
+        "run-mtf-indicator-golden",
+        help="Run one or all multi-timeframe indicator composition golden scenarios",
+    )
+    mtf_ind.add_argument("--scenario", required=True, help="Scenario name or 'all'")
     args = parser.parse_args(argv)
 
     if args.command == "run-golden":
@@ -106,6 +133,18 @@ def main(argv: list[str] | None = None) -> int:
                     failures += 1
             return 0 if failures == 0 else 1
         ok, payload = _run_mtf_one(args.scenario)
+        return _emit(payload, ok=ok)
+
+    if args.command == "run-mtf-indicator-golden":
+        if args.scenario == "all":
+            failures = 0
+            for name in ALL_MTF_INDICATOR_SCENARIO_NAMES:
+                ok, payload = _run_mtf_indicator_one(name)
+                print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+                if not ok:
+                    failures += 1
+            return 0 if failures == 0 else 1
+        ok, payload = _run_mtf_indicator_one(args.scenario)
         return _emit(payload, ok=ok)
 
     parser.error(f"Unknown command: {args.command}")

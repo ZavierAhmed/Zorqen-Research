@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 1.1): `a19c57368979e0e97db5dc885c09087809f14ced`
-- Milestone 1.1A base commit: `a19c57368979e0e97db5dc885c09087809f14ced`
+- Previous verified commit (Milestone 1.1A): `7cffce916aac3c3264d7ec79932355bb5e7e3213`
+- Milestone 1.2 base commit: `7cffce916aac3c3264d7ec79932355bb5e7e3213`
 - Milestone result commit: current HEAD containing this status update (exact SHA after commit).
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
 - Current environment: Windows development laptop
@@ -23,25 +23,25 @@ Unchanged. Research qualification only; no account/trading APIs.
 
 ## 3. Initial Strategy Scope
 
-Family metadata remains seeded. Milestone 1.1A seals indicator bundle provenance only — no MTF provider composition or strategy algorithms.
+Family metadata remains seeded. Milestone 1.2 composes sealed indicator feeds into MTF decisions only — no Adaptive MTF / S&R signal algorithms.
 
 ## 4. Current Milestone
 
-- Milestone: `1.1A` — Seal indicator bundle provenance and feed identity
+- Milestone: `1.2` — Compose indicators into MTF decisions
 - Status: Complete pending independent review and all four GitHub checks green after push
-- Base: `a19c57368979e0e97db5dc885c09087809f14ced`
+- Base: `7cffce916aac3c3264d7ec79932355bb5e7e3213`
 - Work completed:
-  - Exact `IndicatorInput` type + candle reconstruction before bundle accept
-  - Closed `recalculate_indicator_series` dispatcher; retain calculator output only
-  - Bundle document/hash helpers; feed rebuilds trusted bundle and compares identity
-  - Provenance adversarial tests (forged input/series/bundle)
-  - Traceability 0011 updated (0 NOT TESTED)
+  - `MultiTimeframeIndicatorInput.from_verified` with MTF rebuild + indicator bundle↔timeframe binding + composition hash
+  - `MultiTimeframeIndicatorDecisionFeed` / composed views with `latest_closed_index` context mapping
+  - Indicator-aware adapter/runner + `IndicatorStrategyBacktestEnvelope` wrapper
+  - Literal goldens A–F + `run-mtf-indicator-golden` CLI
+  - Adversarial / performance / regression tests; ADR 0012; traceability 0012 (0 NOT TESTED)
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
 ## 5. Latest Verified State
 
-All Milestone 1.1 view / indicator / MTF hashes preserved (unchanged).
+Preserved Milestone 1.1 / MTF hashes (unchanged):
 
 ```text
 warmup bundle:         b9e4c70816cf3118632fbeb1274b52a1b70fedc1bb92b0f514ac442a59e94e7a
@@ -54,43 +54,52 @@ exact-close envelope:  8e5259d68e152ee3c1b0767ec372866ddcbb8b67eeae96175345e2512
 two-contexts envelope: c0945d5d2609c958a2cdae155e65606e59233a6fc6c03ec6906bc8065bfa0d94
 ```
 
+Additive Milestone 1.2 composition / envelope hashes:
+
+```text
+execution-indicator-warmup composition: 09c42366069a9be625274a0829314b986a714a66417a088794335cfb06015e01
+execution-indicator-warmup envelope:    9b197291e0da4dbe3a16c8266f8868272217911a883ca6b7d39f0515412ebaae
+exact-close-context composition:        65d5ebe74797553994e29ac7538bd745fefd6f2e9959949e2f92322cf9e5e93c
+exact-close-context envelope:           b4fcff2a65ac6906d99b44adc45a3a8639d173af044d026bd516a20604e89370
+```
+
 ## 6–8. Product / Architecture / Research Engine
 
-Standalone bounded indicator feed with sealed provenance. No strategy signals, no MTF indicator composition, no persistence/API/UI. Milestone 1.2 is not started.
+MTF candle feed + provenance-sealed indicator feeds compose into provider-safe decision views. Unchanged `BacktestEngine` fill/stop/fee/next-open semantics. No strategy signals, persistence, API, or UI for Adaptive MTF / S&R.
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 1.1A. Milestone 1.2 remains unauthorized.
+Awaiting independent review of Milestone 1.2. Milestone 1.3 remains unauthorized.
 
-## 10. Verification Evidence (Milestone 1.1A)
+## 10. Verification Evidence (Milestone 1.2)
 
 Commands actually executed:
 
 ```text
 uv sync --frozen --all-extras
 uv run ruff check . / format --check / mypy src                  # pass
-uv run pytest tests/unit -k "indicator_view or indicator_feed or indicator_bundle or provenance" -q
-                                                                 # 68 passed
-uv run pytest tests/unit -q                                      # 645 passed (Win + Linux)
+uv run pytest tests/unit -k "multi_timeframe and indicator or mtf_indicator or indicator_composition" -q
+                                                                 # 28 passed
+uv run pytest tests/unit -q                                      # 673 passed (Win + Linux)
 uv run pytest tests/integration/test_artifact_filesystem.py -q   # 9 passed
 uv run pytest tests/integration -q -m integration                # 34 passed
 uv run pytest tests/integration/test_candle_query.py -q          # 5 passed
-alembic downgrade base / upgrade head                            # 0001–0003; head=0003
+alembic downgrade base / upgrade head                            # twice; head=0003
 zorqen-indicators verify-golden / verify-view-golden             # twice each; hashes preserved
-zorqen-backtest / timeframes / mtf goldens                       # twice each
+zorqen-backtest / timeframes / mtf / mtf-indicator goldens       # twice each
 worker --check                                                   # PostgreSQL reachable
 frontend npm ci / lint / test --run / build                      # 15 tests
-docker/nginx live/ready/families                                 # healthy/ready/200
-Linux Quality (node:22-bookworm)                                 # pass
+docker/nginx live/ready/families via :5173                       # healthy/ready/200
+Linux Quality (node:22-bookworm, UV_PROJECT_ENVIRONMENT=/tmp)    # LINUX_QUALITY_OK
 ```
 
-Traceability: `docs/verification/0011-bounded-indicator-feed-traceability.md` — **NOT TESTED: 0**
+Traceability: `docs/verification/0012-multi-timeframe-indicator-composition-traceability.md` — **NOT TESTED: 0**
 
 ## 11. Known Defects / Limitations
 
-- Indicator decision feed is standalone; not attached to MTF providers (deferred to 1.2).
-- No Adaptive MTF / Support-Resistance strategy logic.
+- No Adaptive MTF / Support-Resistance strategy logic (signals, ATR stops, breakouts).
+- No indicator/backtest persistence, campaigns, API routes, or UI for composition.
 
 ## 12. Next Authorized Work
 
-Milestone 1.2 remains unauthorized pending independent review of Milestone 1.1A.
+Milestone 1.3 remains unauthorized pending independent review of Milestone 1.2.

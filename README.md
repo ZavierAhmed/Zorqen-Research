@@ -346,7 +346,7 @@ Standalone single-timeframe visibility layer over trusted indicator series (no d
 
 **Prefix-only hashes:** provider-visible prefix hashes and decision-view hashes depend only on the visible prefix (plus stable series metadata). Full result/input hashes are excluded so future candle changes cannot alter earlier provider-visible hashes.
 
-**Not yet composed with MTF:** `MultiTimeframeDecisionFeed` and provider adapters are unchanged. Composition is Milestone 1.2.
+**Not yet composed with MTF:** composition with `MultiTimeframeDecisionFeed` is Milestone 1.2 (see below).
 
 ```bash
 uv run zorqen-indicators verify-view-golden --scenario all
@@ -354,6 +354,23 @@ uv run zorqen-indicators verify-view-golden --scenario warmup-progression
 ```
 
 No Adaptive MTF / Support-Resistance signals, ATR stops, breakout decisions, persistence, or provider adapters are implemented in this milestone.
+
+## Multi-timeframe indicator composition (Milestone 1.2)
+
+Provenance-sealed bridge that binds the existing MTF candle decision feed to optional provenance-sealed indicator decision feeds per timeframe.
+
+**Flow:** `MultiTimeframeBacktestInput` + optional `IndicatorSeriesBundle`s → `MultiTimeframeIndicatorInput` → `MultiTimeframeIndicatorDecisionFeed` → `view_at(i)` → `MultiTimeframeIndicatorDecisionView` → indicator-aware adapter → unchanged `BacktestEngine` → `IndicatorStrategyBacktestEnvelope`.
+
+**Mapping:** execution indicators use the execution bar index; context indicators use `latest_closed_index` (never the execution index). Overall readiness requires candle readiness and every configured indicator slot ready; unconfigured (`None`) slots do not block.
+
+**Provider safety:** provider-visible composed hashes exclude composition/bundle/result/input hashes and full series lengths. Run-level `indicator_composition_hash` is envelope provenance only.
+
+```bash
+uv run zorqen-backtest run-mtf-indicator-golden --scenario all
+uv run zorqen-backtest run-mtf-indicator-golden --scenario execution-indicator-warmup
+```
+
+No Adaptive MTF / Support-Resistance signal rules, ATR stops, persistence, API, or UI are implemented in this milestone.
 
 ## Frontend API routing (same-origin default)
 
