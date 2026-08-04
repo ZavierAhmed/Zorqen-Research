@@ -17,20 +17,21 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **1.0** adds a pure deterministic indicator series foundation:
+Milestone **1.1** adds a standalone no-lookahead bounded indicator decision feed:
 
-- Factory-bound `IndicatorInput` and immutable `IndicatorSeries` (calculator-owned assembly only)
-- Fixed local Decimal math policy (`schema_version=1`, precision `50`, `ROUND_HALF_EVEN`)
-- Indicators: `ema_close`, `true_range`, `wilder_atr`, `rolling_highest`, `rolling_lowest`, `prior_rolling_highest`, `prior_rolling_lowest`
-- Warmup values are `None` (JSON `null`); defined values are finite `Decimal` only
-- Canonical compact JSON serialization and SHA-256 result hashing
-- Literal goldens via `zorqen-indicators verify-golden`
-- **No strategy signals**, no Adaptive MTF / Support-Resistance rules, no provider factories
-- **No provider integration:** complete offline series are not attached to decision contexts or feeds (bounded indicator views are deferred)
+- Factory-bound `IndicatorSeriesBundle` over calculator-produced `IndicatorSeries`
+- Internal verified sources with prefix-only content hash chains
+- `IndicatorDecisionFeed.view_at(bar_index)` → `IndicatorDecisionView` with `VisibleIndicatorHistory`
+- Per-indicator readiness (latest visible value is a defined `Decimal`)
+- Literal view goldens via `zorqen-indicators verify-view-golden`
+- **No MTF/provider composition** — existing multi-timeframe feeds/adapters/contexts are unchanged
+- **No strategy signals**, Adaptive MTF / Support-Resistance rules, persistence, APIs, or UI
+
+Milestone **1.0 / 1.0A** remain the pure deterministic indicator series foundation (complete offline `IndicatorSeries`, sealed provenance, `verify-golden`).
 
 Earlier milestones cover repository foundation, registry/audit, artifacts/datasets, Binance import, verified candle query, deterministic backtest kernel, immutable strategy-definition schemas, timeframe resampling/alignment, and the multi-timeframe decision feed.
 
-**Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, provider-safe indicator views, dynamic provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, MTF+indicator composition (Milestone 1.2), dynamic provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -326,7 +327,7 @@ Pure offline indicator kernel (no database, network, strategy signals, or provid
 
 **Warmup:** undefined slots are `None` / JSON `null`. Inclusive rolling windows include the current candle; prior-window extrema exclude it.
 
-**Safety boundary:** `IndicatorSeries` is a complete offline series and must not be passed directly to strategy providers. Provider-safe bounded indicator views are deferred.
+**Safety boundary:** `IndicatorSeries` is a complete offline series and must not be passed directly to strategy providers. Use the Milestone 1.1 bounded feed/views instead.
 
 ```bash
 uv run zorqen-indicators verify-golden --scenario all
@@ -334,6 +335,25 @@ uv run zorqen-indicators verify-golden --scenario ema-close
 ```
 
 No Adaptive MTF / Support-Resistance signals, ATR stops, breakout decisions, or provider adapters are implemented in this milestone.
+
+## Bounded indicator decision feed (Milestone 1.1)
+
+Standalone single-timeframe visibility layer over trusted indicator series (no database, network, strategy signals, or MTF provider integration).
+
+**Flow:** `IndicatorInput` + calculator `IndicatorSeries` → `IndicatorSeriesBundle` → `IndicatorDecisionFeed` → `view_at(i)` → bounded `IndicatorDecisionView`.
+
+**Bounded history:** `VisibleIndicatorHistory` exposes only `values[0:bar_index+1]` via indexing, slicing, and iteration. No complete-source / full-values API. Safe `repr`/`str` omit future values and source length.
+
+**Prefix-only hashes:** provider-visible prefix hashes and decision-view hashes depend only on the visible prefix (plus stable series metadata). Full result/input hashes are excluded so future candle changes cannot alter earlier provider-visible hashes.
+
+**Not yet composed with MTF:** `MultiTimeframeDecisionFeed` and provider adapters are unchanged. Composition is Milestone 1.2.
+
+```bash
+uv run zorqen-indicators verify-view-golden --scenario all
+uv run zorqen-indicators verify-view-golden --scenario warmup-progression
+```
+
+No Adaptive MTF / Support-Resistance signals, ATR stops, breakout decisions, persistence, or provider adapters are implemented in this milestone.
 
 ## Frontend API routing (same-origin default)
 
