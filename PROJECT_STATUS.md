@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 0.8): `06951980cb1832c3c2a7e11d84675e741609c5b9`
-- Milestone 0.8A base commit: `06951980cb1832c3c2a7e11d84675e741609c5b9`
+- Previous verified commit (Milestone 0.8A): `3ac02582af357cf91a3080149abf470d2f60222c`
+- Milestone 0.9 base commit: `3ac02582af357cf91a3080149abf470d2f60222c`
 - Milestone result commit: current HEAD containing this status update (exact SHA after commit).
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
 - Current environment: Windows development laptop
@@ -23,30 +23,25 @@ Unchanged. Research qualification only; no account/trading APIs.
 
 ## 3. Initial Strategy Scope
 
-Family metadata remains seeded. Milestone 0.8A binds resampling/alignment integrity only — no executable strategy algorithms.
+Family metadata remains seeded. Milestone 0.9 adds the multi-timeframe decision feed only — no executable Adaptive MTF / Support-Resistance algorithms.
 
 ## 4. Current Milestone
 
-- Milestone: `0.8A` — Bind Resampling and Alignment Results to Verified Candle Content
+- Milestone: `0.9` — Deterministic Multi-Timeframe Backtest Decision Feed
 - Status: Complete pending independent review and all four GitHub checks green after push
-- Base: `06951980cb1832c3c2a7e11d84675e741609c5b9`
+- Base: `3ac02582af357cf91a3080149abf470d2f60222c`
 - Work completed:
-  - Factory-only `ResampledCandleSeries` with computed source/target metadata and hashes
-  - Public alignment APIs compute candle hashes; reject caller-supplied hashes
-  - Mapping recomputed and bound to close times; factory-only `ContextAlignment` / `MultiContextAlignment`
-  - Frozen single-context alignment hash; multi hash updated for child alignment binding
-  - Traceability 0008 updated (0 NOT TESTED)
+  - Factory-bound `MultiTimeframeBacktestInput` + decision feed/views
+  - `MultiTimeframeDecisionProvider` + engine adapter + runner
+  - `StrategyBacktestEnvelope` identity binding
+  - Frozen MTF goldens + `zorqen-backtest run-mtf-golden`
+  - ADR 0009 + traceability 0009 (0 NOT TESTED)
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
 ## 5. Latest Verified State
 
-Fixture manifest hash:
-`5a0f0d0aacc3bc06969c4d45a38906a8d8a423ab449178b22fbf6a8abe81df80`
-
-Mocked import hashes:
-- normalized_sha256: `e54d56e814276e63574c57a66c6776bf3add0827c8401f354362695a34933159`
-- content_hash: `ac9762134a0eb1f24b3dd9012df72f01ad19d4c1aa628188fcd6265195c3fc6e`
+Fixture / dataset / strategy-definition / resampling / alignment hashes: unchanged from Milestone 0.8A (see prior status).
 
 Golden backtest hashes (unchanged):
 
@@ -60,70 +55,58 @@ a9273a5972f6bbae9dc9443385a2d3076dfc2a7549699e4a803e5899e2f928a6
 b342b5be8e4943a1bf82abbe26e3329424447515062df4e728154e47dea71c7d
 ```
 
-Example strategy definition hash (unchanged):
-`eb98cec1aa7c862514fa3fca8878769b38a28fa98d96b4c9bb49d41b51dc08f4`
-
-Frozen resampling target hashes (unchanged):
+Selected MTF bridge golden hashes:
 
 ```text
-1m→5m:  56c28d9a685c7e36ea8c0c511ec41630bf58d567c00f7f99f3d3e8ad68f8db94
-3m→15m: 11d98ca40e25366fd268c7220b3b3cd1639d019e328863e0f8917bbcdd514940
-15m→1h: 50a6b2ddd1bc888e9d9bbc49e222025528a34b2f07773d168cc0c2929306af04
-1h→4h:  7762636a0bafc047b942ad51623cb5d40aae6ae389c256e47b9aac11028f76a7
-4h→1d:  6a3800671b847193f484959759964fbecbb72ce5e6a96a35e2b49cb636c70b23
-1d→1w:  522ca23a8e8b5b400dd78de03a396421af980f5a91bff06085c751634b743a80
+exact-close bundle:   1ef63eff5e42d00d2d3edabbc849a3f1f651929c3ba52abbc08fd64497794167
+exact-close envelope: 8e5259d68e152ee3c1b0767ec372866ddcbb8b67eeae96175345e2512879b70d
+two-contexts align:   1ced7609616bfc7e79039cd8ac9cbead378c7feffbeeec5db4bda3b7174f48ac
+two-contexts envelope:c0945d5d2609c958a2cdae155e65606e59233a6fc6c03ec6906bc8065bfa0d94
 ```
-
-Single-context alignment hash (`1h` + `4h`):
-`f8c8d2548fc6772ce421c9abb459efafd6e46aefd415dbf174406678f31d6698`
-
-Multi-context alignment hash (`1h` + `4h`/`1d`) — 0.8A contract includes child alignment hashes:
-`1ced7609616bfc7e79039cd8ac9cbead378c7feffbeeec5db4bda3b7174f48ac`
-
-(Previous 0.8 multi hash `30abad8971a01b39c3a8579e9929c42f56fc168b4694885834ab911c9b1f904e` intentionally replaced.)
 
 ## 6–8. Product / Architecture / Research Engine
 
-No strategy algorithms, indicators, provider/backtest context wiring, definition persistence/API/UI, campaigns, scoring, MOMO, or trading. Milestone 0.9 is not started.
+No strategy algorithms, indicators, dynamic provider factories, persistence/API/UI, campaigns, scoring, MOMO, or trading. Milestone 1.0 is not started.
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 0.8A and confirmation that all four GitHub checks are green after push.
+Awaiting independent review of Milestone 0.9 and confirmation that all four GitHub checks are green after push.
 
-## 10. Verification Evidence (Milestone 0.8A)
+## 10. Verification Evidence (Milestone 0.9)
 
 Commands actually executed:
 
 ```text
 uv sync --frozen --all-extras
 uv run ruff check .                                            # All checks passed
-uv run ruff format --check .                                   # 195 files already formatted
-uv run mypy src                                                # Success: 117 source files
-uv run pytest tests/unit -k "resampl or alignment or timeframe" -q
-                                                               # 71 passed, 392 deselected
-uv run pytest tests/unit -q                                    # 463 passed (Win + Linux)
+uv run ruff format --check .                                   # 211 files already formatted
+uv run mypy src                                                # Success: 129 source files
+uv run pytest tests/unit -k "multi_timeframe or decision_feed or strategy_backtest" -q
+                                                               # 12 passed, 463 deselected
+uv run pytest tests/unit -q                                    # 475 passed (Win + Linux)
 uv run pytest tests/integration/test_artifact_filesystem.py -q # 9 passed
 uv run pytest tests/integration -q -m integration              # 34 passed
 uv run pytest tests/integration/test_candle_query.py -q        # 5 passed
-alembic downgrade base / upgrade head                          # 0001/0002/0003 only; no new migration
+alembic downgrade base / upgrade head                          # 0001/0002/0003 only
 uv run zorqen-backtest run-golden --scenario all               # twice, byte-identical
 uv run zorqen-timeframes verify-golden --scenario all          # twice, byte-identical
-uv run python -m zorqen_research.worker --check                # PostgreSQL reachable
-frontend npm ci / lint / test --run / build                    # eslint ok; 15 passed; build ok
-docker compose build + up; nginx live/ready/families/datasets  # 200; fixture hash preserved
-Linux container (node:22-bookworm): quality.yml sequence       # ruff/mypy; 463 unit; frontend 15 + build
+uv run zorqen-backtest run-mtf-golden --scenario all           # twice, byte-identical
+uv run python -m zorqen_research.worker --check                # OK
+frontend npm ci / lint / test --run / build                    # 15 passed; build ok
+docker compose build + nginx live/ready/families/datasets      # 200; fixture hash preserved
+Linux container (node:22-bookworm): quality.yml sequence       # ruff/mypy; 475 unit; frontend 15 + build
 ```
 
-Traceability: `docs/verification/0008-timeframe-resampling-traceability.md` — **NOT TESTED: 0**
+Traceability: `docs/verification/0009-multi-timeframe-backtest-traceability.md` — **NOT TESTED: 0**
 
 GitHub Actions: unknown until push.
 
 ## 11. Known Defects and Limitations
 
-- Resampling is in-memory only; no derivative dataset persistence
-- Backtest provider context is not yet multi-timeframe aware
-- No executable Adaptive MTF / Support-Resistance implementation
+- No concrete Adaptive MTF / Support-Resistance provider
+- No backtest/strategy persistence or API
+- MTF runner rejects definitions without context requirements (use single-TF path)
 
 ## 12. Next Authorized Work
 
-None until Milestone 0.8A is independently accepted. Milestone 0.9 is not authorized.
+None until Milestone 0.9 is independently accepted. Milestone 1.0 is not authorized.

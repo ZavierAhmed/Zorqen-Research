@@ -17,19 +17,18 @@ It may fetch **public** market-data snapshots (Milestone 0.4) for research quali
 
 ## Current milestone scope
 
-Milestone **0.8 / 0.8A** adds deterministic candle resampling and no-lookahead multi-timeframe alignment:
+Milestone **0.9** adds a deterministic multi-timeframe backtest decision feed:
 
-- Exact integer-ratio timeframe derivation (`1m→5m`, `1d→1w`, …)
-- Strict complete-bucket resampling with exact Decimal OHLCV aggregation
-- Computed source/target candle hashes from canonical CSV bytes
-- Close-time context alignment with linear monotonic pointer
-- Factory-bound results: no forged metadata, caller-supplied hashes, or arbitrary mappings (0.8A)
-- Frozen goldens via `zorqen-timeframes verify-golden`
-- **No strategy is implemented** (no Adaptive MTF / Support-Resistance rules, indicators, or provider factories)
+- Factory-bound `MultiTimeframeBacktestInput` validated against strategy definitions
+- No-lookahead visible histories and per-bar decision views
+- Adapter into the existing unchanged `BacktestEngine`
+- `StrategyBacktestEnvelope` binding strategy/market-data/result identities
+- Frozen bridge goldens via `zorqen-backtest run-mtf-golden`
+- **No strategy algorithm is implemented** (no Adaptive MTF / Support-Resistance rules, indicators, or dynamic provider factories)
 
-Earlier milestones cover repository foundation, registry/audit, artifacts/datasets, Binance import, verified candle query, deterministic backtest kernel, and immutable strategy-definition schemas.
+Earlier milestones cover repository foundation, registry/audit, artifacts/datasets, Binance import, verified candle query, deterministic backtest kernel, immutable strategy-definition schemas, and timeframe resampling/alignment.
 
-**Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, indicators, provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
+**Still not implemented:** Adaptive MTF / Support-Resistance strategy logic, indicators, dynamic provider factories, limit/maker orders, funding/leverage, backtest persistence/API/UI, campaigns, candidates, scoring, worker job leasing, autonomous research, or MOMO Quant integration.
 
 ## Architecture overview
 
@@ -293,6 +292,23 @@ Pure in-memory resampling and no-lookahead alignment (no database, network, or s
 ```bash
 uv run zorqen-timeframes verify-golden --scenario all
 uv run zorqen-timeframes verify-golden --scenario one-minute-to-five-minute
+```
+
+No Adaptive MTF or Support/Resistance strategy logic is implemented in this milestone.
+
+## Multi-timeframe backtest decision feed (Milestone 0.9)
+
+Bridges verified execution/context candles and a strategy instance into the existing deterministic backtest kernel without changing fill/stop/fee semantics.
+
+**Input integrity:** context timeframes/warmups must exactly match the definition; hashes and alignments are computed; single-timeframe definitions are rejected by the MTF runner.
+
+**No lookahead:** providers see only visibility-bounded histories. Exact-close context availability follows ADR 0008.
+
+**Warmup:** the underlying MTF provider is called only when execution and every context are ready (`max(1, warmup_bars)`). Intents still fill on the next open.
+
+```bash
+uv run zorqen-backtest run-mtf-golden --scenario all
+uv run zorqen-backtest run-mtf-golden --scenario exact-close-readiness
 ```
 
 No Adaptive MTF or Support/Resistance strategy logic is implemented in this milestone.
