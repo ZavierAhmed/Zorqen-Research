@@ -1,6 +1,6 @@
 # 0012 — Multi-Timeframe Indicator Composition Traceability
 
-Milestone 1.2. Mandatory `NOT TESTED` count: **0**.
+Milestone 1.2 / 1.2A. Mandatory `NOT TESTED` count: **0**.
 
 | Requirement | Implementation | Exact automated test | Evidence |
 | ----------- | -------------- | -------------------- | -------- |
@@ -11,7 +11,7 @@ Milestone 1.2. Mandatory `NOT TESTED` count: **0**.
 | Symbol / TF / count / hash / `candles is` binding | `_rebind_indicator_bundle` | `test_mtf_indicator_wrong_symbol_timeframe_count_hash_identity`, `test_mtf_indicator_correct_hash_wrong_tuple_identity_rejected` | PROVEN BY AUTOMATED TEST |
 | Reject cross-slot placement | `_rebind_indicator_bundle` | `test_mtf_indicator_cross_slot_placement_rejected`, `test_mtf_indicator_swapped_context_bundles_rejected` | PROVEN BY AUTOMATED TEST |
 | Composition hash schema + MTF + ordered bundle hashes | `build_indicator_composition_document` | golden `composition-identity-sensitivity` | PROVEN BY AUTOMATED TEST |
-| No caller-supplied composition hash / ordering / counts | factory `init=False` | `test_mtf_indicator_direct_construction_blocked` | PROVEN BY AUTOMATED TEST |
+| No caller-supplied composition hash | factory `init=False` + `reverify_indicator_composition` | `test_mtf_indicator_direct_construction_blocked`, `test_composition_provenance_false_schema_and_hash_rejected`, `test_composition_provenance_false_hash_never_reaches_envelope` (`object.__new__` fully populated forgery) | PROVEN BY AUTOMATED TEST |
 | Feed owns MTF + optional indicator feeds; prefixes once | `MultiTimeframeIndicatorDecisionFeed.from_composition` | `test_mtf_indicator_view_at_constant_work_independent_of_bar_index` | PROVEN BY AUTOMATED TEST |
 | Execution indicators indexed by execution bar | `indicator_feed.view_at` | golden `execution-indicator-warmup` | PROVEN BY AUTOMATED TEST |
 | Context indicators use `latest_closed_index` | `indicator_feed.view_at` | `test_mtf_indicator_context_unavailable_and_exact_close_mapping`, golden `exact-close-context-indicator` | PROVEN BY AUTOMATED TEST |
@@ -41,12 +41,22 @@ Milestone 1.2. Mandatory `NOT TESTED` count: **0**.
 | No Adaptive MTF / S&R signals / ATR stops / persistence / API / UI | scope | package layout under composition modules; no new routes/migrations | VERIFIED BY SOURCE INSPECTION |
 | Existing Milestone 1.1 view hashes preserved | regression goldens | indicator view golden CLI (verification evidence) | PROVEN BY AUTOMATED TEST |
 | Existing MTF hashes `1ef63eff…` / `8e5259d6…` / `c0945d5d…` preserved | MTF goldens | `test_existing_mtf_runner_regression_exact_close` + MTF CLI | PROVEN BY AUTOMATED TEST |
+| Composition is rebuilt before feed use | `reverify_indicator_composition` in `from_composition` | `test_composition_provenance_feed_never_retains_caller`, `test_composition_provenance_byte_identical_forged_replaced_by_trusted` | PROVEN BY AUTOMATED TEST |
+| Feed never retains caller composition | `object.__setattr__(self, "composition", trusted)` | `test_composition_provenance_feed_never_retains_caller`, `test_composition_provenance_byte_identical_forged_replaced_by_trusted` | PROVEN BY AUTOMATED TEST |
+| Runner uses only feed-owned trusted composition | `indicator_runner.py` `trusted = feed.composition` | `test_composition_provenance_byte_identical_forged_replaced_by_trusted`, `test_composition_provenance_false_hash_never_reaches_envelope` | PROVEN BY AUTOMATED TEST |
+| Envelope independently reverifies composition | `IndicatorStrategyBacktestEnvelope.from_run` | `test_composition_provenance_false_schema_and_hash_rejected`, `test_composition_provenance_false_hash_never_reaches_envelope` | PROVEN BY AUTOMATED TEST |
+| False composition hash fails | identity match after rebuild | `test_composition_provenance_false_schema_and_hash_rejected`, `test_composition_provenance_false_hash_never_reaches_envelope` | PROVEN BY AUTOMATED TEST |
+| Complete forged composition fails | `object.__new__` fully populated attacks | `test_composition_provenance_false_schema_and_hash_rejected`, `test_composition_provenance_execution_bundle_mutations_rejected`, `test_composition_provenance_swapped_and_reordered_slots_rejected`, `test_composition_provenance_context_slot_count_and_order_rejected`, `test_composition_provenance_unrelated_composition_rejected` | PROVEN BY AUTOMATED TEST |
+| Nested forged MTF input fails | `_reverify_mtf_input` via reverify | `test_composition_provenance_false_mtf_hash_and_forged_mtf_rejected` | PROVEN BY AUTOMATED TEST |
+| Nested forged indicator bundle fails | `_rebind_indicator_bundle` + canonical identity | `test_composition_provenance_execution_bundle_mutations_rejected`, `test_composition_provenance_nested_forged_series_rejected`, `test_composition_provenance_context_slot_count_and_order_rejected` | PROVEN BY AUTOMATED TEST |
+| Byte-identical composition forgery is replaced by trusted reconstruction | feed/runner retain rebuilt object | `test_composition_provenance_byte_identical_forged_replaced_by_trusted` | PROVEN BY AUTOMATED TEST |
+| Incomplete composition produces a controlled domain error | AttributeError/TypeError/ValueError/IndexError → `StrategyBacktestValidationError` | `test_composition_provenance_incomplete_exact_class_controlled_error` | PROVEN BY AUTOMATED TEST |
 
 ## Totals
 
 | Evidence class | Count |
 | -------------- | ----- |
-| PROVEN BY AUTOMATED TEST | 38 |
+| PROVEN BY AUTOMATED TEST | 48 |
 | VERIFIED BY SOURCE INSPECTION | 4 |
 | NOT TESTED | **0** |
 | NOT APPLICABLE | 0 |

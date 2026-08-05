@@ -8,8 +8,8 @@
 - Repository: `ZavierAhmed/Zorqen-Research`
 - Default branch: `main`
 - Current branch: `main`
-- Previous verified commit (Milestone 1.1A): `7cffce916aac3c3264d7ec79932355bb5e7e3213`
-- Milestone 1.2 base commit: `7cffce916aac3c3264d7ec79932355bb5e7e3213`
+- Previous verified commit (Milestone 1.2): `aa310ea91a6751776eddf18529d100332fcd4276`
+- Milestone 1.2A base commit: `aa310ea91a6751776eddf18529d100332fcd4276`
 - Milestone result commit: current HEAD containing this status update (exact SHA after commit).
 - Master specification: `docs/specification/Zorqen_Research_Master_Specification_v0.1.pdf`
 - Current environment: Windows development laptop
@@ -23,23 +23,33 @@ Unchanged. Research qualification only; no account/trading APIs.
 
 ## 3. Initial Strategy Scope
 
-Family metadata remains seeded. Milestone 1.2 composes sealed indicator feeds into MTF decisions only — no Adaptive MTF / S&R signal algorithms.
+Family metadata remains seeded. Milestone 1.2A seals composition provenance only — no Adaptive MTF / S&R signal algorithms.
 
 ## 4. Current Milestone
 
-- Milestone: `1.2` — Compose indicators into MTF decisions
+- Milestone: `1.2A` — Seal MTF indicator composition provenance
 - Status: Complete pending independent review and all four GitHub checks green after push
-- Base: `7cffce916aac3c3264d7ec79932355bb5e7e3213`
+- Base: `aa310ea91a6751776eddf18529d100332fcd4276`
 - Work completed:
-  - `MultiTimeframeIndicatorInput.from_verified` with MTF rebuild + indicator bundle↔timeframe binding + composition hash
-  - `MultiTimeframeIndicatorDecisionFeed` / composed views with `latest_closed_index` context mapping
-  - Indicator-aware adapter/runner + `IndicatorStrategyBacktestEnvelope` wrapper
-  - Literal goldens A–F + `run-mtf-indicator-golden` CLI
-  - Adversarial / performance / regression tests; ADR 0012; traceability 0012 (0 NOT TESTED)
+  - `reverify_indicator_composition` + complete composition identity comparison
+  - Feed rebuilds and retains only trusted composition
+  - Runner uses `feed.composition` only after feed creation
+  - Envelope independently reverifies before hashing
+  - Fully populated `object.__new__` forgery attacks + byte-identical replacement + controlled incomplete-object errors
+  - Traceability 0012 updated (0 NOT TESTED)
 - Implementation started: Yes
 - Repository commit created: Yes (this milestone commit)
 
 ## 5. Latest Verified State
+
+Preserved Milestone 1.2 composition / envelope hashes (unchanged):
+
+```text
+execution-indicator-warmup composition: 09c42366069a9be625274a0829314b986a714a66417a088794335cfb06015e01
+execution-indicator-warmup envelope:    9b197291e0da4dbe3a16c8266f8868272217911a883ca6b7d39f0515412ebaae
+exact-close-context composition:        65d5ebe74797553994e29ac7538bd745fefd6f2e9959949e2f92322cf9e5e93c
+exact-close-context envelope:           b4fcff2a65ac6906d99b44adc45a3a8639d173af044d026bd516a20604e89370
+```
 
 Preserved Milestone 1.1 / MTF hashes (unchanged):
 
@@ -54,42 +64,33 @@ exact-close envelope:  8e5259d68e152ee3c1b0767ec372866ddcbb8b67eeae96175345e2512
 two-contexts envelope: c0945d5d2609c958a2cdae155e65606e59233a6fc6c03ec6906bc8065bfa0d94
 ```
 
-Additive Milestone 1.2 composition / envelope hashes:
-
-```text
-execution-indicator-warmup composition: 09c42366069a9be625274a0829314b986a714a66417a088794335cfb06015e01
-execution-indicator-warmup envelope:    9b197291e0da4dbe3a16c8266f8868272217911a883ca6b7d39f0515412ebaae
-exact-close-context composition:        65d5ebe74797553994e29ac7538bd745fefd6f2e9959949e2f92322cf9e5e93c
-exact-close-context envelope:           b4fcff2a65ac6906d99b44adc45a3a8639d173af044d026bd516a20604e89370
-```
-
 ## 6–8. Product / Architecture / Research Engine
 
-MTF candle feed + provenance-sealed indicator feeds compose into provider-safe decision views. Unchanged `BacktestEngine` fill/stop/fee/next-open semantics. No strategy signals, persistence, API, or UI for Adaptive MTF / S&R.
+Composition provenance: every feed/runner/envelope path rebuilds via `from_verified` and compares canonical identity before use. No caller composition object retention. Unchanged indicator calculations, alignment, readiness, provider-visible hashes, strategy logic, persistence, API, frontend.
 
 ## 9. Outstanding Work
 
-Awaiting independent review of Milestone 1.2. Milestone 1.3 remains unauthorized.
+Awaiting independent review of Milestone 1.2A. Milestone 1.3 remains unauthorized.
 
-## 10. Verification Evidence (Milestone 1.2)
+## 10. Verification Evidence (Milestone 1.2A)
 
 Commands actually executed:
 
 ```text
 uv sync --frozen --all-extras
-uv run ruff check . / format --check / mypy src                  # pass
-uv run pytest tests/unit -k "multi_timeframe and indicator or mtf_indicator or indicator_composition" -q
-                                                                 # 28 passed
-uv run pytest tests/unit -q                                      # 673 passed (Win + Linux)
+uv run ruff check . / format --check / mypy src                  # pass (162 files)
+uv run pytest tests/unit -k "mtf_indicator or indicator_composition or composition_provenance" -q
+                                                                 # 39 passed, 645 deselected
+uv run pytest tests/unit -q                                      # 684 passed (Win + Linux)
 uv run pytest tests/integration/test_artifact_filesystem.py -q   # 9 passed
 uv run pytest tests/integration -q -m integration                # 34 passed
 uv run pytest tests/integration/test_candle_query.py -q          # 5 passed
 alembic downgrade base / upgrade head                            # twice; head=0003
 zorqen-indicators verify-golden / verify-view-golden             # twice each; hashes preserved
-zorqen-backtest / timeframes / mtf / mtf-indicator goldens       # twice each
+zorqen-backtest / timeframes / mtf / mtf-indicator goldens       # twice each; MTFIND hashes frozen
 worker --check                                                   # PostgreSQL reachable
 frontend npm ci / lint / test --run / build                      # 15 tests
-docker/nginx live/ready/families via :5173                       # healthy/ready/200
+docker/nginx live/ready/families via :5173                       # ready/healthy/2/200
 Linux Quality (node:22-bookworm, UV_PROJECT_ENVIRONMENT=/tmp)    # LINUX_QUALITY_OK
 ```
 
@@ -102,4 +103,4 @@ Traceability: `docs/verification/0012-multi-timeframe-indicator-composition-trac
 
 ## 12. Next Authorized Work
 
-Milestone 1.3 remains unauthorized pending independent review of Milestone 1.2.
+Milestone 1.3 remains unauthorized pending independent review of Milestone 1.2A.

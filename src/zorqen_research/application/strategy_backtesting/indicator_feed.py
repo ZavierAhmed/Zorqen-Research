@@ -9,6 +9,7 @@ from zorqen_research.application.strategy_backtesting.feed import MultiTimeframe
 from zorqen_research.domain.strategy_backtesting.errors import StrategyBacktestValidationError
 from zorqen_research.domain.strategy_backtesting.indicator_composition import (
     MultiTimeframeIndicatorInput,
+    reverify_indicator_composition,
 )
 from zorqen_research.domain.strategy_backtesting.indicator_decision_views import (
     ContextIndicatorDecisionView,
@@ -34,23 +35,21 @@ class MultiTimeframeIndicatorDecisionFeed:
         cls,
         composition: object,
     ) -> MultiTimeframeIndicatorDecisionFeed:
-        if type(composition) is not MultiTimeframeIndicatorInput:
-            msg = "composition must be an exact MultiTimeframeIndicatorInput"
-            raise StrategyBacktestValidationError(msg)
+        trusted = reverify_indicator_composition(composition)
 
-        mtf_feed = MultiTimeframeDecisionFeed.from_input(composition.input_bundle)
+        mtf_feed = MultiTimeframeDecisionFeed.from_input(trusted.input_bundle)
         execution_feed = (
             None
-            if composition.execution_indicators is None
-            else IndicatorDecisionFeed.from_bundle(composition.execution_indicators)
+            if trusted.execution_indicators is None
+            else IndicatorDecisionFeed.from_bundle(trusted.execution_indicators)
         )
         context_feeds = tuple(
             None if bundle is None else IndicatorDecisionFeed.from_bundle(bundle)
-            for bundle in composition.context_indicators
+            for bundle in trusted.context_indicators
         )
 
         self = object.__new__(cls)
-        object.__setattr__(self, "composition", composition)
+        object.__setattr__(self, "composition", trusted)
         object.__setattr__(self, "_mtf_feed", mtf_feed)
         object.__setattr__(self, "_execution_indicator_feed", execution_feed)
         object.__setattr__(self, "_context_indicator_feeds", context_feeds)

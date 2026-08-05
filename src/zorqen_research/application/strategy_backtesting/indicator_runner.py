@@ -38,8 +38,9 @@ class MultiTimeframeIndicatorBacktestRunner:
             raise StrategyBacktestValidationError(msg)
 
         feed = MultiTimeframeIndicatorDecisionFeed.from_composition(composition)
+        trusted = feed.composition
         adapter = MultiTimeframeIndicatorProviderAdapter(feed=feed, provider=provider)
-        input_bundle = composition.input_bundle
+        input_bundle = trusted.input_bundle
         engine = BacktestEngine(
             symbol=input_bundle.symbol,
             timeframe=input_bundle.execution_timeframe,
@@ -51,7 +52,7 @@ class MultiTimeframeIndicatorBacktestRunner:
             expected_input_hash=input_bundle.execution_candle_sha256,
         )
         return IndicatorStrategyBacktestEnvelope.from_run(
-            composition=composition,
+            composition=trusted,
             policy=policy,
             result=result,
             provider_invocation_count=adapter.provider_invocation_count,

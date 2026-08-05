@@ -176,6 +176,154 @@ def hash_indicator_composition_document(document: dict[str, object]) -> str:
     )
 
 
+def _require_indicator_bundle_canonical_identity(
+    *,
+    submitted: IndicatorSeriesBundle,
+    trusted: IndicatorSeriesBundle,
+    slot_label: str,
+) -> None:
+    """Compare indicator bundles by canonical identity, not object identity."""
+    if submitted.symbol != trusted.symbol:
+        msg = f"{slot_label} symbol does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.timeframe is not trusted.timeframe:
+        msg = f"{slot_label} timeframe does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.input_candle_count != trusted.input_candle_count:
+        msg = f"{slot_label} input_candle_count does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.input_candle_hash != trusted.input_candle_hash:
+        msg = f"{slot_label} input_candle_hash does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.input_hash != trusted.input_hash:
+        msg = f"{slot_label} input_hash does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.series_count != trusted.series_count:
+        msg = f"{slot_label} series_count does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.series_keys != trusted.series_keys:
+        msg = f"{slot_label} series_keys do not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if len(submitted.series) != len(trusted.series):
+        msg = f"{slot_label} series length does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    for index, (left, right) in enumerate(zip(submitted.series, trusted.series, strict=True)):
+        if left.result_hash != right.result_hash:
+            msg = f"{slot_label} series[{index}] result_hash does not match rebuilt composition"
+            raise StrategyBacktestValidationError(msg)
+    if submitted.bundle_hash != trusted.bundle_hash:
+        msg = f"{slot_label} bundle_hash does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+
+
+def require_indicator_composition_identity_match(
+    *,
+    submitted: MultiTimeframeIndicatorInput,
+    trusted: MultiTimeframeIndicatorInput,
+) -> None:
+    """Require submitted composition metadata matches a rebuilt trusted composition."""
+    if submitted.schema_version != trusted.schema_version:
+        msg = "schema_version does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    _require_mtf_identity_match(
+        submitted=submitted.input_bundle,
+        trusted=trusted.input_bundle,
+    )
+    if submitted.input_bundle.input_bundle_hash != trusted.input_bundle.input_bundle_hash:
+        msg = "MTF input_bundle_hash does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.input_bundle.strategy_instance_hash != trusted.input_bundle.strategy_instance_hash:
+        msg = "strategy_instance_hash does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.input_bundle.execution_timeframe is not trusted.input_bundle.execution_timeframe:
+        msg = "execution_timeframe does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.input_bundle.execution_candle_count != trusted.input_bundle.execution_candle_count:
+        msg = "execution_candle_count does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if (
+        submitted.input_bundle.execution_candle_sha256
+        != trusted.input_bundle.execution_candle_sha256
+    ):
+        msg = "execution_candle_sha256 does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if len(submitted.input_bundle.contexts) != len(trusted.input_bundle.contexts):
+        msg = "context count does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    for index, (left_ctx, right_ctx) in enumerate(
+        zip(submitted.input_bundle.contexts, trusted.input_bundle.contexts, strict=True)
+    ):
+        if left_ctx.timeframe is not right_ctx.timeframe:
+            msg = f"context[{index}] timeframe does not match rebuilt composition"
+            raise StrategyBacktestValidationError(msg)
+        if left_ctx.alignment.alignment_hash != right_ctx.alignment.alignment_hash:
+            msg = f"context[{index}] alignment_hash does not match rebuilt composition"
+            raise StrategyBacktestValidationError(msg)
+
+    if (submitted.execution_indicators is None) != (trusted.execution_indicators is None):
+        msg = "execution_indicators presence does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    if submitted.execution_indicators is not None and trusted.execution_indicators is not None:
+        _require_indicator_bundle_canonical_identity(
+            submitted=submitted.execution_indicators,
+            trusted=trusted.execution_indicators,
+            slot_label="execution_indicators",
+        )
+
+    if type(submitted.context_indicators) is not tuple:
+        msg = "context_indicators must be an exact tuple"
+        raise StrategyBacktestValidationError(msg)
+    if len(submitted.context_indicators) != len(trusted.context_indicators):
+        msg = "context_indicators length does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+    for index, (left_slot, right_slot) in enumerate(
+        zip(submitted.context_indicators, trusted.context_indicators, strict=True)
+    ):
+        if (left_slot is None) != (right_slot is None):
+            msg = f"context_indicators[{index}] presence does not match rebuilt composition"
+            raise StrategyBacktestValidationError(msg)
+        if left_slot is not None and right_slot is not None:
+            _require_indicator_bundle_canonical_identity(
+                submitted=left_slot,
+                trusted=right_slot,
+                slot_label=f"context_indicators[{index}]",
+            )
+
+    if submitted.indicator_composition_hash != trusted.indicator_composition_hash:
+        msg = "indicator_composition_hash does not match rebuilt composition"
+        raise StrategyBacktestValidationError(msg)
+
+
+def reverify_indicator_composition(submitted: object) -> MultiTimeframeIndicatorInput:
+    """Rebuild and verify a composition; return only the trusted reconstructed object."""
+    if type(submitted) is not MultiTimeframeIndicatorInput:
+        msg = "composition must be an exact MultiTimeframeIndicatorInput"
+        raise StrategyBacktestValidationError(msg)
+    try:
+        _ = (
+            submitted.schema_version,
+            submitted.input_bundle,
+            submitted.execution_indicators,
+            submitted.context_indicators,
+            submitted.indicator_composition_hash,
+        )
+        trusted = MultiTimeframeIndicatorInput.from_verified(
+            input_bundle=submitted.input_bundle,
+            execution_indicators=submitted.execution_indicators,
+            context_indicators=submitted.context_indicators,
+        )
+        require_indicator_composition_identity_match(submitted=submitted, trusted=trusted)
+    except StrategyBacktestValidationError:
+        raise
+    except IndicatorViewValidationError as exc:
+        msg = "composition failed indicator provenance rebuild"
+        raise StrategyBacktestValidationError(msg) from exc
+    except (AttributeError, TypeError, ValueError, IndexError) as exc:
+        msg = "composition must be an exact MultiTimeframeIndicatorInput"
+        raise StrategyBacktestValidationError(msg) from exc
+    return trusted
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class MultiTimeframeIndicatorInput:
     """Trusted MTF candle input bound to optional per-timeframe indicator bundles."""

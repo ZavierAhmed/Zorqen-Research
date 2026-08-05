@@ -11,6 +11,7 @@ from zorqen_research.domain.backtesting.results import BacktestResult
 from zorqen_research.domain.strategy_backtesting.errors import StrategyBacktestValidationError
 from zorqen_research.domain.strategy_backtesting.indicator_composition import (
     MultiTimeframeIndicatorInput,
+    reverify_indicator_composition,
 )
 from zorqen_research.domain.strategy_backtesting.results import StrategyBacktestEnvelope
 
@@ -40,20 +41,18 @@ class IndicatorStrategyBacktestEnvelope:
         provider_invocation_count: int,
         warmup_skipped_decision_count: int,
     ) -> IndicatorStrategyBacktestEnvelope:
-        if type(composition) is not MultiTimeframeIndicatorInput:
-            msg = "composition must be an exact MultiTimeframeIndicatorInput"
-            raise StrategyBacktestValidationError(msg)
+        trusted = reverify_indicator_composition(composition)
         base = StrategyBacktestEnvelope.from_run(
-            input_bundle=composition.input_bundle,
+            input_bundle=trusted.input_bundle,
             policy=policy,
             result=result,
             provider_invocation_count=provider_invocation_count,
             warmup_skipped_decision_count=warmup_skipped_decision_count,
         )
-        if base.input_bundle_hash != composition.input_bundle.input_bundle_hash:
+        if base.input_bundle_hash != trusted.input_bundle.input_bundle_hash:
             msg = "base envelope input_bundle_hash does not match composition"
             raise StrategyBacktestValidationError(msg)
-        composition_hash = composition.indicator_composition_hash
+        composition_hash = trusted.indicator_composition_hash
         digest = sha256_hex(
             json.dumps(
                 {
