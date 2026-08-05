@@ -7,9 +7,19 @@ import json
 import sys
 from pathlib import Path
 
+from zorqen_research.application.baselines.verification import (
+    assert_no_strategy_provider_registered,
+    verify_baseline_family,
+)
 from zorqen_research.application.strategy_definitions.validation import (
     bind_parameters_files,
     validate_definition_file,
+)
+from zorqen_research.domain.baselines.errors import (
+    BaselineError,
+    BaselineParseError,
+    BaselineValidationError,
+    BaselineVerificationError,
 )
 from zorqen_research.domain.strategy_definitions.errors import (
     StrategyDefinitionError,
@@ -82,12 +92,29 @@ def _bind_parameters(definition_path: Path, parameters_path: Path) -> int:
     )
 
 
+def _verify_baseline(family: str) -> int:
+    try:
+        assert_no_strategy_provider_registered()
+        result = verify_baseline_family(family)
+    except BaselineVerificationError as exc:
+        return _emit_err({"ok": False, "error": str(exc)})
+    except (BaselineParseError, BaselineValidationError) as exc:
+        return _emit_err({"ok": False, "error": str(exc)})
+    except BaselineError as exc:
+        return _emit_err({"ok": False, "error": str(exc)})
+    except (StrategyDefinitionParseError, StrategyDefinitionValidationError) as exc:
+        return _emit_err({"ok": False, "error": str(exc)})
+    except OSError:
+        return _emit_err({"ok": False, "error": "unable_to_read_baseline_files"})
+    return _emit_ok(result.to_document())
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="zorqen-strategy",
         description=(
-            "Validate immutable strategy definitions and bind parameters "
-            "(no network, database, or strategy execution)"
+            "Validate immutable strategy definitions, bind parameters, and verify "
+            "authoritative baselines (no network, database, or strategy execution)"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -99,11 +126,19 @@ def main(argv: list[str] | None = None) -> int:
     bind.add_argument("--definition", required=True, type=Path)
     bind.add_argument("--parameters", required=True, type=Path)
 
+    verify = sub.add_parser(
+        "verify-baseline",
+        help="Verify checked-in authoritative baseline contract and evidence",
+    )
+    verify.add_argument("--family", required=True, type=str)
+
     args = parser.parse_args(argv)
     if args.command == "validate-definition":
         return _validate_definition(args.file)
     if args.command == "bind-parameters":
         return _bind_parameters(args.definition, args.parameters)
+    if args.command == "verify-baseline":
+        return _verify_baseline(args.family)
     return 2
 
 
